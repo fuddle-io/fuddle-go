@@ -22,23 +22,24 @@ go get github.com/fuddle-io/fuddle-go
 ```
 
 ## Register
-To enter the Fuddle registry, nodes must register themselves using `Register`.
+To enter the Fuddle registry, nodes must register themselves.
 
 Once registered, the client loads the state of the cluster and receives updates
 when the cluster changes. Therefore the client maintains an eventually
 consistent view of the cluster, which the node can query without having to make
 RPCs back to the Fuddle node.
 
+### Node State
 The registered node contains:
 
-### Node ID
+#### Node ID
 A unique identifier for the node in the cluster.
 
-### Service
+#### Service
 The type of service running on the node. The service is used for service
 discovery, such as looking up all nodes in the `foo` service.
 
-### Locality
+#### Locality
 The location of the node in the cluster. In a cloud environment this will
 typically be the availability zone.
 
@@ -46,14 +47,14 @@ The locality is used for service discovery, for example if the locality is the
 availability zone, nodes can lookup all nodes in `us-west-1-a`, or all nodes in
 a region using a wildcard, such as `us-west-1-*`.
 
-### Created
+#### Created
 The UNIX timestamp in milliseconds that the node was created.
 
-### Revision
+#### Revision
 An identifier for the version of service running on the node, such as a Git tag
 or commit.
 
-### State
+#### State
 An arbitrary set of application-defined key-value pairs containing information
 about the node that should be propagated to the other nodes in the cluster.
 
