@@ -14,7 +14,7 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 /*
-Package sdk provides an SDK for nodes to register, unregister and query the
+Package fuddle provides an SDK for nodes to register, unregister and query the
 state of the cluster.
 
 # Registering
@@ -50,4 +50,4 @@ service, locality and state.
 
 Clients can subscribe to registry updates.
 */
-package sdk
+package fuddle
