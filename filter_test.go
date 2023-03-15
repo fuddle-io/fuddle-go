@@ -35,7 +35,7 @@ func TestFilter(t *testing.T) {
 			Node: Node{
 				Service:  "service-2",
 				Locality: "us-east-1-c",
-				State: map[string]string{
+				Metadata: map[string]string{
 					"bar": "boo",
 				},
 			},
@@ -47,7 +47,7 @@ func TestFilter(t *testing.T) {
 			Filter: Filter{
 				"myservice": ServiceFilter{
 					Locality: []string{"eu-west-1-*", "eu-west-2-*"},
-					State: StateFilter{
+					Metadata: MetadataFilter{
 						"foo": []string{"bar", "car", "boo"},
 					},
 				},
@@ -55,7 +55,7 @@ func TestFilter(t *testing.T) {
 			Node: Node{
 				Service:  "myservice",
 				Locality: "eu-west-2-c",
-				State: map[string]string{
+				Metadata: map[string]string{
 					"foo": "car",
 				},
 			},
@@ -67,13 +67,13 @@ func TestFilter(t *testing.T) {
 			Filter: Filter{
 				"my*": ServiceFilter{
 					Locality: []string{"eu-west-1-*", "eu-west-2-*"},
-					State: StateFilter{
+					Metadata: MetadataFilter{
 						"foo": []string{"bar", "car", "boo"},
 					},
 				},
 				"*service": ServiceFilter{
 					Locality: []string{"eu-west-1-*", "eu-west-2-*"},
-					State: StateFilter{
+					Metadata: MetadataFilter{
 						"foo": []string{"bar", "car", "boo"},
 					},
 				},
@@ -81,7 +81,7 @@ func TestFilter(t *testing.T) {
 			Node: Node{
 				Service:  "myservice",
 				Locality: "eu-west-2-c",
-				State: map[string]string{
+				Metadata: map[string]string{
 					"foo": "car",
 				},
 			},
@@ -93,13 +93,13 @@ func TestFilter(t *testing.T) {
 			Filter: Filter{
 				"my*": ServiceFilter{
 					Locality: []string{"us-west-1-*", "us-west-2-*"},
-					State: StateFilter{
+					Metadata: MetadataFilter{
 						"foo": []string{"bar", "car", "boo"},
 					},
 				},
 				"*service": ServiceFilter{
 					Locality: []string{"eu-west-1-*", "eu-west-2-*"},
-					State: StateFilter{
+					Metadata: MetadataFilter{
 						"foo": []string{"bar", "car", "boo"},
 					},
 				},
@@ -107,7 +107,7 @@ func TestFilter(t *testing.T) {
 			Node: Node{
 				Service:  "myservice",
 				Locality: "eu-west-2-c",
-				State: map[string]string{
+				Metadata: map[string]string{
 					"foo": "car",
 				},
 			},
@@ -120,7 +120,7 @@ func TestFilter(t *testing.T) {
 			Node: Node{
 				Service:  "myservice",
 				Locality: "eu-west-2-c",
-				State: map[string]string{
+				Metadata: map[string]string{
 					"foo": "car",
 				},
 			},
@@ -138,19 +138,19 @@ func TestServiceFilter(t *testing.T) {
 	tests := []struct {
 		Filter   ServiceFilter
 		Locality string
-		State    map[string]string
+		Metadata map[string]string
 		Match    bool
 	}{
 		// Node is a match.
 		{
 			Filter: ServiceFilter{
 				Locality: []string{"eu-west-1-*", "eu-west-2-*"},
-				State: StateFilter{
+				Metadata: MetadataFilter{
 					"foo": []string{"bar", "car", "boo"},
 				},
 			},
 			Locality: "eu-west-2-a",
-			State: map[string]string{
+			Metadata: map[string]string{
 				"foo": "car",
 			},
 			Match: true,
@@ -160,12 +160,12 @@ func TestServiceFilter(t *testing.T) {
 		{
 			Filter: ServiceFilter{
 				Locality: []string{"eu-west-1-*", "eu-west-2-*"},
-				State: StateFilter{
+				Metadata: MetadataFilter{
 					"foo": []string{"bar", "car", "boo"},
 				},
 			},
 			Locality: "us-east-1-a",
-			State: map[string]string{
+			Metadata: map[string]string{
 				"foo": "car",
 			},
 			Match: false,
@@ -175,12 +175,12 @@ func TestServiceFilter(t *testing.T) {
 		{
 			Filter: ServiceFilter{
 				Locality: []string{"eu-west-1-*", "eu-west-2-*"},
-				State: StateFilter{
+				Metadata: MetadataFilter{
 					"foo": []string{"bar", "car", "boo"},
 				},
 			},
 			Locality: "eu-west-2-a",
-			State: map[string]string{
+			Metadata: map[string]string{
 				"foo": "xyz",
 			},
 			Match: false,
@@ -190,24 +190,24 @@ func TestServiceFilter(t *testing.T) {
 	for _, tt := range tests {
 		match := tt.Filter.Match(Node{
 			Locality: tt.Locality,
-			State:    tt.State,
+			Metadata: tt.Metadata,
 		})
 		assert.Equal(t, tt.Match, match)
 	}
 }
 
-func TestStateFilter(t *testing.T) {
+func TestMetadataFilter(t *testing.T) {
 	tests := []struct {
-		Filter StateFilter
-		State  map[string]string
-		Match  bool
+		Filter   MetadataFilter
+		Metadata map[string]string
+		Match    bool
 	}{
 		// Value is a match.
 		{
-			Filter: StateFilter{
+			Filter: MetadataFilter{
 				"foo": []string{"bar", "car", "boo"},
 			},
-			State: map[string]string{
+			Metadata: map[string]string{
 				"foo": "car",
 			},
 			Match: true,
@@ -215,10 +215,10 @@ func TestStateFilter(t *testing.T) {
 
 		// Value not a match.
 		{
-			Filter: StateFilter{
+			Filter: MetadataFilter{
 				"foo": []string{"bar", "car", "boo"},
 			},
-			State: map[string]string{
+			Metadata: map[string]string{
 				"foo": "xyz",
 			},
 			Match: false,
@@ -226,10 +226,10 @@ func TestStateFilter(t *testing.T) {
 
 		// Value is a wildcard match.
 		{
-			Filter: StateFilter{
+			Filter: MetadataFilter{
 				"foo": []string{"bar", "car.*", "boo"},
 			},
-			State: map[string]string{
+			Metadata: map[string]string{
 				"foo": "car.123",
 			},
 			Match: true,
@@ -237,11 +237,11 @@ func TestStateFilter(t *testing.T) {
 
 		// Node doesn't match all keys.
 		{
-			Filter: StateFilter{
+			Filter: MetadataFilter{
 				"foo": []string{"bar", "car", "boo"},
 				"xyz": []string{"a", "b", "c"},
 			},
-			State: map[string]string{
+			Metadata: map[string]string{
 				"foo": "car",
 				"xyz": "d",
 			},
@@ -250,17 +250,17 @@ func TestStateFilter(t *testing.T) {
 
 		// Filter key not in node.
 		{
-			Filter: StateFilter{
+			Filter: MetadataFilter{
 				"foo": []string{"bar"},
 			},
-			State: map[string]string{},
-			Match: false,
+			Metadata: map[string]string{},
+			Match:    false,
 		},
 	}
 
 	for _, tt := range tests {
 		match := tt.Filter.Match(Node{
-			State: tt.State,
+			Metadata: tt.Metadata,
 		})
 		assert.Equal(t, tt.Match, match)
 	}

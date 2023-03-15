@@ -31,7 +31,7 @@ func Example_registerOrdersServiceNode() {
 			Locality: "aws.us-east-1-b",
 			Created:  time.Now().UnixMilli(),
 			Revision: "v5.1.0-812ebbc",
-			State: map[string]string{
+			Metadata: map[string]string{
 				"status":           "booting",
 				"addr.rpc.ip":      "192.168.2.1",
 				"addr.rpc.port":    "5562",
@@ -51,7 +51,7 @@ func Example_registerOrdersServiceNode() {
 
 	// Once ready update the nodes status to 'active'. This update will be
 	// propagated to the other nodes in the cluster.
-	err = registry.UpdateLocalState(map[string]string{
+	err = registry.UpdateLocalMetadata(map[string]string{
 		"status": "active",
 	})
 	if err != nil {
@@ -79,7 +79,7 @@ func Example_lookupOrdersServiceNodes() {
 	orderNodes := registry.Nodes(WithFilter(Filter{
 		"order": {
 			Locality: []string{"aws.us-east-1-*"},
-			State: StateFilter{
+			Metadata: MetadataFilter{
 				"status":           []string{"active"},
 				"protocol.version": []string{"2", "3"},
 			},
@@ -87,7 +87,7 @@ func Example_lookupOrdersServiceNodes() {
 	}))
 	addrs := []string{}
 	for _, node := range orderNodes {
-		addr := node.State["addr.rpc.ip"] + ":" + node.State["addr.rpc.port"]
+		addr := node.Metadata["addr.rpc.ip"] + ":" + node.Metadata["addr.rpc.port"]
 		addrs = append(addrs, addr)
 	}
 
@@ -114,7 +114,7 @@ func Example_subscribeToOrdersServiceNodes() {
 	filter := Filter{
 		"order": {
 			Locality: []string{"aws.us-east-1-*"},
-			State: StateFilter{
+			Metadata: MetadataFilter{
 				"status":           []string{"active"},
 				"protocol.version": []string{"2", "3"},
 			},
@@ -127,7 +127,7 @@ func Example_subscribeToOrdersServiceNodes() {
 	registry.Subscribe(func(orderNodes []Node) {
 		addrs = nil
 		for _, node := range orderNodes {
-			addr := node.State["addr.rpc.ip"] + ":" + node.State["addr.rpc.port"]
+			addr := node.Metadata["addr.rpc.ip"] + ":" + node.Metadata["addr.rpc.port"]
 			addrs = append(addrs, addr)
 		}
 

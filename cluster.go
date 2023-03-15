@@ -83,10 +83,10 @@ func (c *cluster) Subscribe(cb func(nodes []Node), opts ...NodesOption) func() {
 	}
 }
 
-// UpdateLocalState adds the given state to the local node. Note this is only
+// UpdateLocalMetadata adds the given state to the local node. Note this is only
 // adds or updates state, it won't remove entries.
-func (c *cluster) UpdateLocalState(update map[string]string) error {
-	return c.UpdateState(c.localID, update)
+func (c *cluster) UpdateLocalMetadata(update map[string]string) error {
+	return c.UpdateMetadata(c.localID, update)
 }
 
 // AddNode adds the given node to the cluster.
@@ -111,7 +111,7 @@ func (c *cluster) RemoveNode(id string) {
 	c.notifySubscribersLocked()
 }
 
-func (c *cluster) UpdateState(id string, update map[string]string) error {
+func (c *cluster) UpdateMetadata(id string, update map[string]string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -121,7 +121,7 @@ func (c *cluster) UpdateState(id string, update map[string]string) error {
 	}
 
 	for k, v := range update {
-		node.State[k] = v
+		node.Metadata[k] = v
 	}
 	c.notifySubscribersLocked()
 	return nil

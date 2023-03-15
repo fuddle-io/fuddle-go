@@ -84,10 +84,10 @@ func (r *Registry) Subscribe(cb func(nodes []Node), opts ...NodesOption) func() 
 	return r.cluster.Subscribe(cb, opts...)
 }
 
-// UpdateLocalState will update the state of this node, which will be propagated
+// UpdateLocalMetadata will update the state of this node, which will be propagated
 // to the other nodes in the cluster.
-func (r *Registry) UpdateLocalState(update map[string]string) error {
-	if err := r.cluster.UpdateLocalState(update); err != nil {
+func (r *Registry) UpdateLocalMetadata(update map[string]string) error {
+	if err := r.cluster.UpdateLocalMetadata(update); err != nil {
 		return fmt.Errorf("registry: %w", err)
 	}
 	if err := r.sendMetadataUpdate(update); err != nil {
@@ -141,7 +141,7 @@ func (r *Registry) sendRegisterUpdate(node Node) error {
 			Created:  node.Created,
 			Revision: node.Revision,
 		},
-		Metadata: node.State,
+		Metadata: node.Metadata,
 	}
 	b, err := json.Marshal(update)
 	if err != nil {
@@ -218,9 +218,9 @@ func (r *Registry) applyRegisterUpdateLocked(update *NodeUpdate) error {
 		Locality: update.Attributes.Locality,
 		Revision: update.Attributes.Revision,
 		Created:  update.Attributes.Created,
-		// Copy the state to avoid modifying the update. If update.State is
+		// Copy the state to avoid modifying the update. If update.Metadata is
 		// nil this returns an empty map.
-		State: CopyState(update.Metadata),
+		Metadata: CopyMetadata(update.Metadata),
 	}
 	return r.cluster.AddNode(node)
 }
@@ -234,7 +234,7 @@ func (r *Registry) applyMetadataUpdateLocked(update *NodeUpdate) error {
 	if update.Metadata == nil {
 		return nil
 	}
-	return r.cluster.UpdateState(update.ID, update.Metadata)
+	return r.cluster.UpdateMetadata(update.ID, update.Metadata)
 }
 
 func connect(addrs []string) (*websocket.Conn, error) {

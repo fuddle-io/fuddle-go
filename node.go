@@ -35,8 +35,8 @@ type Node struct {
 	// Revision identifies the version of the service running on the node.
 	Revision string
 
-	// State contains application defined key-value pairs.
-	State map[string]string
+	// Metadata contains application defined key-value pairs.
+	Metadata map[string]string
 }
 
 func (s *Node) Equal(o Node) bool {
@@ -55,11 +55,11 @@ func (s *Node) Equal(o Node) bool {
 	if s.Revision != o.Revision {
 		return false
 	}
-	if len(s.State) != len(o.State) {
+	if len(s.Metadata) != len(o.Metadata) {
 		return false
 	}
-	for k, v1 := range s.State {
-		v2, ok := o.State[k]
+	for k, v1 := range s.Metadata {
+		v2, ok := o.Metadata[k]
 		if !ok {
 			return false
 		}
@@ -72,11 +72,11 @@ func (s *Node) Equal(o Node) bool {
 
 func (s *Node) Copy() Node {
 	cp := *s
-	cp.State = CopyState(s.State)
+	cp.Metadata = CopyMetadata(s.Metadata)
 	return cp
 }
 
-func CopyState(s map[string]string) map[string]string {
+func CopyMetadata(s map[string]string) map[string]string {
 	if s == nil {
 		return make(map[string]string)
 	}
