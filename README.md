@@ -4,6 +4,7 @@
 
 
 # Fuddle Go
+[![Go Reference](https://pkg.go.dev/badge/github.com/fuddle-io/fuddle-go.svg)](https://pkg.go.dev/github.com/fuddle-io/fuddle-go)
 
 A Go SDK for the [Fuddle](https://github.com/fuddle-io/fuddle) service registry,
 which lets nodes register themselves and discover other nodes in the cluster.
