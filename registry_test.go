@@ -13,19 +13,21 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-package fuddle
+package fuddle_test
 
 import (
 	"fmt"
 	"time"
+
+	fuddle "github.com/fuddle-io/fuddle-go"
 )
 
 // Registers an 'orders' service node in 'us-east-1-b'.
 func Example_registerOrdersServiceNode() {
-	registry, err := Register(
+	registry, err := fuddle.Register(
 		// Seed addresses of Fuddle servers.
 		[]string{"192.168.1.1:8220", "192.168.1.2:8220", "192.168.1.3:8220"},
-		Node{
+		fuddle.Node{
 			ID:       "orders-32eaba4e",
 			Service:  "orders",
 			Locality: "aws.us-east-1-b",
@@ -62,10 +64,10 @@ func Example_registerOrdersServiceNode() {
 // Registers a 'frontend' service and queries the set of active order service
 // nodes in us-east-1.
 func Example_lookupOrdersServiceNodes() {
-	registry, err := Register(
+	registry, err := fuddle.Register(
 		// Seed addresses of Fuddle servers.
 		[]string{"192.168.1.1:8220", "192.168.1.2:8220", "192.168.1.3:8220"},
-		Node{
+		fuddle.Node{
 			// ...
 		},
 	)
@@ -76,10 +78,10 @@ func Example_lookupOrdersServiceNodes() {
 
 	// Filter to only include order service nodes in us-east-1 whose status
 	// is active and protocol version is either 2 or 3.
-	orderNodes := registry.Nodes(WithFilter(Filter{
+	orderNodes := registry.Nodes(fuddle.WithFilter(fuddle.Filter{
 		"order": {
 			Locality: []string{"aws.us-east-1-*"},
-			Metadata: MetadataFilter{
+			Metadata: fuddle.MetadataFilter{
 				"status":           []string{"active"},
 				"protocol.version": []string{"2", "3"},
 			},
@@ -99,10 +101,10 @@ func Example_lookupOrdersServiceNodes() {
 // Registers a 'frontend' service and subscribes to the set of active order
 // service nodes in us-east-1.
 func Example_subscribeToOrdersServiceNodes() {
-	registry, err := Register(
+	registry, err := fuddle.Register(
 		// Seed addresses of Fuddle servers.
 		[]string{"192.168.1.1:8220", "192.168.1.2:8220", "192.168.1.3:8220"},
-		Node{
+		fuddle.Node{
 			// ...
 		},
 	)
@@ -111,10 +113,10 @@ func Example_subscribeToOrdersServiceNodes() {
 	}
 	defer registry.Unregister()
 
-	filter := Filter{
+	filter := fuddle.Filter{
 		"order": {
 			Locality: []string{"aws.us-east-1-*"},
-			Metadata: MetadataFilter{
+			Metadata: fuddle.MetadataFilter{
 				"status":           []string{"active"},
 				"protocol.version": []string{"2", "3"},
 			},
@@ -124,7 +126,7 @@ func Example_subscribeToOrdersServiceNodes() {
 	// Filter to only include order service nodes in us-east-1 whose status
 	// is active and protocol version is either 2 or 3.
 	var addrs []string
-	registry.Subscribe(func(orderNodes []Node) {
+	registry.Subscribe(func(orderNodes []fuddle.Node) {
 		addrs = nil
 		for _, node := range orderNodes {
 			addr := node.Metadata["addr.rpc.ip"] + ":" + node.Metadata["addr.rpc.port"]
@@ -132,5 +134,5 @@ func Example_subscribeToOrdersServiceNodes() {
 		}
 
 		fmt.Println("order service:", addrs)
-	}, WithFilter(filter))
+	}, fuddle.WithFilter(filter))
 }
