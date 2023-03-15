@@ -10,12 +10,6 @@
 A Go SDK for the [Fuddle](https://github.com/fuddle-io/fuddle) service registry,
 which lets nodes register themselves and discover other nodes in the cluster.
 
----
-
-> :warning: **Fuddle is still in development**
-
----
-
 # Usage
 
 ## Installation
