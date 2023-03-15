@@ -15,6 +15,32 @@
 
 package fuddle
 
+import (
+	"time"
+)
+
+type registryOptions struct {
+	connectTimeout time.Duration
+}
+
+type RegistryOption interface {
+	apply(*registryOptions)
+}
+
+type connectTimeoutOption struct {
+	timeout time.Duration
+}
+
+func (o connectTimeoutOption) apply(opts *registryOptions) {
+	opts.connectTimeout = o.timeout
+}
+
+// WithConnectTimeout defines the time to wait for each connection attempt
+// before timing out. Default to 1 second.
+func WithConnectTimeout(timeout time.Duration) RegistryOption {
+	return connectTimeoutOption{timeout: timeout}
+}
+
 type nodesOptions struct {
 	filter *Filter
 }
