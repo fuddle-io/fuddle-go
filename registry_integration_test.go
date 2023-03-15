@@ -97,7 +97,12 @@ func TestRegistry_ConnectTriesAllAddresses(t *testing.T) {
 	addrs = append(addrs, getClusterAddrs()...)
 
 	localNode := randomNode()
-	registry, err := fuddle.Register(addrs, localNode)
+	registry, err := fuddle.Register(
+		addrs,
+		localNode,
+		// Use a shorter connect timeout to speed up the test.
+		fuddle.WithConnectTimeout(time.Millisecond*100),
+	)
 	require.NoError(t, err)
 	defer registry.Unregister()
 }

@@ -45,8 +45,15 @@ type Registry struct {
 // updates to maintain a local eventually consistent view of the cluster.
 //
 // The given addresses are a set of seed addresses for Fuddle nodes.
-func Register(addrs []string, node Node) (*Registry, error) {
-	conn, err := connect(addrs)
+func Register(addrs []string, node Node, opts ...RegistryOption) (*Registry, error) {
+	options := &registryOptions{
+		connectTimeout: time.Millisecond * 1000,
+	}
+	for _, o := range opts {
+		o.apply(options)
+	}
+
+	conn, err := connect(addrs, options.connectTimeout)
 	if err != nil {
 		return nil, fmt.Errorf("registry: %w", err)
 	}
@@ -239,10 +246,10 @@ func (r *Registry) applyMetadataUpdateLocked(update *nodeUpdate) error {
 	return r.cluster.UpdateMetadata(update.ID, update.Metadata)
 }
 
-func connect(addrs []string) (*websocket.Conn, error) {
+func connect(addrs []string, timeout time.Duration) (*websocket.Conn, error) {
 	var result error
 	for _, addr := range addrs {
-		c, err := connectAddr(addr)
+		c, err := connectAddr(addr, timeout)
 		if err != nil {
 			result = multierror.Append(result, err)
 			continue
@@ -254,8 +261,8 @@ func connect(addrs []string) (*websocket.Conn, error) {
 	return nil, fmt.Errorf("connect: %w", result)
 }
 
-func connectAddr(addr string) (*websocket.Conn, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+func connectAddr(addr string, timeout time.Duration) (*websocket.Conn, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	url := "ws://" + addr + "/api/v1/register"
