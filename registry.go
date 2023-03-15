@@ -16,9 +16,11 @@
 package fuddle
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/gorilla/websocket"
 	multierror "github.com/hashicorp/go-multierror"
@@ -240,8 +242,7 @@ func (r *Registry) applyMetadataUpdateLocked(update *nodeUpdate) error {
 func connect(addrs []string) (*websocket.Conn, error) {
 	var result error
 	for _, addr := range addrs {
-		url := "ws://" + addr + "/api/v1/register"
-		c, _, err := websocket.DefaultDialer.Dial(url, nil)
+		c, err := connectAddr(addr)
 		if err != nil {
 			result = multierror.Append(result, err)
 			continue
@@ -251,4 +252,17 @@ func connect(addrs []string) (*websocket.Conn, error) {
 	}
 
 	return nil, fmt.Errorf("connect: %w", result)
+}
+
+func connectAddr(addr string) (*websocket.Conn, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	url := "ws://" + addr + "/api/v1/register"
+	c, _, err := websocket.DefaultDialer.DialContext(ctx, url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return c, nil
 }
