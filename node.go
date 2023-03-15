@@ -72,11 +72,11 @@ func (s *Node) Equal(o Node) bool {
 
 func (s *Node) Copy() Node {
 	cp := *s
-	cp.Metadata = CopyMetadata(s.Metadata)
+	cp.Metadata = copyMetadata(s.Metadata)
 	return cp
 }
 
-func CopyMetadata(s map[string]string) map[string]string {
+func copyMetadata(s map[string]string) map[string]string {
 	if s == nil {
 		return make(map[string]string)
 	}

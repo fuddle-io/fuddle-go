@@ -121,7 +121,7 @@ func (r *Registry) sync() {
 			return
 		}
 
-		var update NodeUpdate
+		var update nodeUpdate
 		if err := json.Unmarshal(b, &update); err != nil {
 			continue
 		}
@@ -132,10 +132,10 @@ func (r *Registry) sync() {
 }
 
 func (r *Registry) sendRegisterUpdate(node Node) error {
-	update := &NodeUpdate{
+	update := &nodeUpdate{
 		ID:         node.ID,
-		UpdateType: UpdateTypeRegister,
-		Attributes: &NodeAttributes{
+		UpdateType: updateTypeRegister,
+		Attributes: &nodeAttributes{
 			Service:  node.Service,
 			Locality: node.Locality,
 			Created:  node.Created,
@@ -154,9 +154,9 @@ func (r *Registry) sendRegisterUpdate(node Node) error {
 }
 
 func (r *Registry) sendMetadataUpdate(metadata map[string]string) error {
-	update := &NodeUpdate{
+	update := &nodeUpdate{
 		ID:         r.nodeID,
-		UpdateType: UpdateTypeMetadata,
+		UpdateType: updateTypeMetadata,
 		Metadata:   metadata,
 	}
 	b, err := json.Marshal(update)
@@ -170,9 +170,9 @@ func (r *Registry) sendMetadataUpdate(metadata map[string]string) error {
 }
 
 func (r *Registry) sendUnregisterUpdate() error {
-	update := &NodeUpdate{
+	update := &nodeUpdate{
 		ID:         r.nodeID,
-		UpdateType: UpdateTypeUnregister,
+		UpdateType: updateTypeUnregister,
 	}
 	b, err := json.Marshal(update)
 	if err != nil {
@@ -184,15 +184,15 @@ func (r *Registry) sendUnregisterUpdate() error {
 	return nil
 }
 
-func (r *Registry) applyUpdate(update *NodeUpdate) error {
+func (r *Registry) applyUpdate(update *nodeUpdate) error {
 	switch update.UpdateType {
-	case UpdateTypeRegister:
+	case updateTypeRegister:
 		if err := r.applyRegisterUpdateLocked(update); err != nil {
 			return err
 		}
-	case UpdateTypeUnregister:
+	case updateTypeUnregister:
 		r.applyUnregisterUpdateLocked(update)
-	case UpdateTypeMetadata:
+	case updateTypeMetadata:
 		if err := r.applyMetadataUpdateLocked(update); err != nil {
 			return err
 		}
@@ -203,7 +203,7 @@ func (r *Registry) applyUpdate(update *NodeUpdate) error {
 	return nil
 }
 
-func (r *Registry) applyRegisterUpdateLocked(update *NodeUpdate) error {
+func (r *Registry) applyRegisterUpdateLocked(update *nodeUpdate) error {
 	if update.ID == "" {
 		return fmt.Errorf("cluster: join update: missing id")
 	}
@@ -220,16 +220,16 @@ func (r *Registry) applyRegisterUpdateLocked(update *NodeUpdate) error {
 		Created:  update.Attributes.Created,
 		// Copy the state to avoid modifying the update. If update.Metadata is
 		// nil this returns an empty map.
-		Metadata: CopyMetadata(update.Metadata),
+		Metadata: copyMetadata(update.Metadata),
 	}
 	return r.cluster.AddNode(node)
 }
 
-func (r *Registry) applyUnregisterUpdateLocked(update *NodeUpdate) {
+func (r *Registry) applyUnregisterUpdateLocked(update *nodeUpdate) {
 	r.cluster.RemoveNode(update.ID)
 }
 
-func (r *Registry) applyMetadataUpdateLocked(update *NodeUpdate) error {
+func (r *Registry) applyMetadataUpdateLocked(update *nodeUpdate) error {
 	// If the update is missing state must ignore it.
 	if update.Metadata == nil {
 		return nil
