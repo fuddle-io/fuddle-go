@@ -49,8 +49,8 @@ type ServiceFilter struct {
 	// where the nodes locality must match at least on of the listed localities.
 	Locality []string
 
-	// State contains the state filter.
-	State StateFilter
+	// Metadata contains the state filter.
+	Metadata MetadataFilter
 }
 
 func (f *ServiceFilter) Match(node Node) bool {
@@ -68,21 +68,21 @@ func (f *ServiceFilter) Match(node Node) bool {
 		}
 	}
 
-	return f.State.Match(node)
+	return f.Metadata.Match(node)
 }
 
-// StateFilter specifies a node filter that discards nodes whose state doesn't
-// match the state listed.
+// MetadataFilter specifies a node filter that discards nodes whose metadata
+// doesn't match the state listed.
 //
 // To match, for each filter key, the node must include a value for that key
 // and match at least on of the filters for that key.
 //
 // The filter values may include wildcards, though the keys cannot.
-type StateFilter map[string][]string
+type MetadataFilter map[string][]string
 
-func (f *StateFilter) Match(node Node) bool {
+func (f *MetadataFilter) Match(node Node) bool {
 	for filterKey, filterValues := range *f {
-		v, ok := node.State[filterKey]
+		v, ok := node.Metadata[filterKey]
 		// If the filter key is not in the node, its not a match.
 		if !ok {
 			return false

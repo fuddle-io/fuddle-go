@@ -15,15 +15,15 @@
 
 package fuddle
 
-type UpdateType string
+type updateType string
 
 const (
-	UpdateTypeRegister   UpdateType = "register"
-	UpdateTypeUnregister UpdateType = "unregister"
-	UpdateTypeMetadata   UpdateType = "metadata"
+	updateTypeRegister   updateType = "register"
+	updateTypeUnregister updateType = "unregister"
+	updateTypeMetadata   updateType = "metadata"
 )
 
-type NodeAttributes struct {
+type nodeAttributes struct {
 	// Service is the type of service running on the node.
 	Service string `json:"service,omitempty"`
 
@@ -37,17 +37,17 @@ type NodeAttributes struct {
 	Revision string `json:"revision,omitempty"`
 }
 
-type NodeUpdate struct {
+type nodeUpdate struct {
 	// ID is the ID of the node in the update.
 	ID string `json:"id,omitempty"`
 
 	// UpdateType indicates the type of update, either register, unregister or
 	// metadata.
-	UpdateType UpdateType `json:"update_type,omitempty"`
+	UpdateType updateType `json:"update_type,omitempty"`
 
 	// Attributes contains the set of immutable attributes for the node. This
 	// will only be included in register updates.
-	Attributes *NodeAttributes `json:"attributes,omitempty"`
+	Attributes *nodeAttributes `json:"attributes,omitempty"`
 
 	// Metadata contains application defined metadata. If the update is type
 	// metadata, the field only contains the fields that have been updated.

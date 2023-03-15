@@ -32,7 +32,7 @@ func TestCluster_LookupNode(t *testing.T) {
 		Locality: "aws.us-east-1-b",
 		Created:  123456,
 		Revision: "v1.2.3",
-		State: map[string]string{
+		Metadata: map[string]string{
 			"foo": "bar",
 		},
 	}
@@ -43,7 +43,7 @@ func TestCluster_LookupNode(t *testing.T) {
 
 	// Verify Nodes returns a copy of each node.
 	nodes[0].ID = "456"
-	nodes[0].State["foo"] = "abc"
+	nodes[0].Metadata["foo"] = "abc"
 
 	assert.Equal(t, []Node{node}, cluster.Nodes())
 }
@@ -59,13 +59,13 @@ func TestCluster_NodesLookupWithFilter(t *testing.T) {
 			Filter: Filter{
 				"service-1": {
 					Locality: []string{"eu-west-1-*", "eu-west-2-*"},
-					State: StateFilter{
+					Metadata: MetadataFilter{
 						"foo": []string{"bar", "car", "boo"},
 					},
 				},
 				"service-2": {
 					Locality: []string{"us-east-1-*", "eu-west-2-*"},
-					State: StateFilter{
+					Metadata: MetadataFilter{
 						"bar": []string{"bar", "car", "boo"},
 					},
 				},
@@ -75,7 +75,7 @@ func TestCluster_NodesLookupWithFilter(t *testing.T) {
 					ID:       "1",
 					Service:  "service-1",
 					Locality: "eu-west-2-c",
-					State: map[string]string{
+					Metadata: map[string]string{
 						"foo": "car",
 					},
 				},
@@ -83,7 +83,7 @@ func TestCluster_NodesLookupWithFilter(t *testing.T) {
 					ID:       "2",
 					Service:  "service-2",
 					Locality: "us-east-1-c",
-					State: map[string]string{
+					Metadata: map[string]string{
 						"bar": "boo",
 					},
 				},
@@ -93,7 +93,7 @@ func TestCluster_NodesLookupWithFilter(t *testing.T) {
 					ID:       "1",
 					Service:  "service-1",
 					Locality: "eu-west-2-c",
-					State: map[string]string{
+					Metadata: map[string]string{
 						"foo": "car",
 					},
 				},
@@ -101,7 +101,7 @@ func TestCluster_NodesLookupWithFilter(t *testing.T) {
 					ID:       "2",
 					Service:  "service-2",
 					Locality: "us-east-1-c",
-					State: map[string]string{
+					Metadata: map[string]string{
 						"bar": "boo",
 					},
 				},
@@ -113,7 +113,7 @@ func TestCluster_NodesLookupWithFilter(t *testing.T) {
 			Filter: Filter{
 				"service-1": {
 					Locality: []string{"eu-west-1-*", "eu-west-2-*"},
-					State: StateFilter{
+					Metadata: MetadataFilter{
 						"foo": []string{"bar", "car", "boo"},
 					},
 				},
@@ -123,7 +123,7 @@ func TestCluster_NodesLookupWithFilter(t *testing.T) {
 					ID:       "1",
 					Service:  "service-1",
 					Locality: "eu-west-2-c",
-					State: map[string]string{
+					Metadata: map[string]string{
 						"foo": "car",
 					},
 				},
@@ -131,7 +131,7 @@ func TestCluster_NodesLookupWithFilter(t *testing.T) {
 					ID:       "2",
 					Service:  "service-2",
 					Locality: "us-east-1-c",
-					State: map[string]string{
+					Metadata: map[string]string{
 						"bar": "boo",
 					},
 				},
@@ -141,7 +141,7 @@ func TestCluster_NodesLookupWithFilter(t *testing.T) {
 					ID:       "1",
 					Service:  "service-1",
 					Locality: "eu-west-2-c",
-					State: map[string]string{
+					Metadata: map[string]string{
 						"foo": "car",
 					},
 				},
@@ -156,7 +156,7 @@ func TestCluster_NodesLookupWithFilter(t *testing.T) {
 					ID:       "1",
 					Service:  "service-1",
 					Locality: "eu-west-2-c",
-					State: map[string]string{
+					Metadata: map[string]string{
 						"foo": "car",
 					},
 				},
@@ -164,7 +164,7 @@ func TestCluster_NodesLookupWithFilter(t *testing.T) {
 					ID:       "2",
 					Service:  "service-2",
 					Locality: "us-east-1-c",
-					State: map[string]string{
+					Metadata: map[string]string{
 						"bar": "boo",
 					},
 				},
@@ -187,26 +187,26 @@ func TestCluster_NodesLookupWithFilter(t *testing.T) {
 	}
 }
 
-func TestCluster_UpdateNodeLocalState(t *testing.T) {
+func TestCluster_UpdateNodeLocalMetadata(t *testing.T) {
 	node := Node{
 		ID:       "123",
 		Service:  "foo",
 		Locality: "aws.us-east-1-b",
 		Created:  123456,
 		Revision: "v1.2.3",
-		State: map[string]string{
+		Metadata: map[string]string{
 			"foo": "bar",
 		},
 	}
 	cluster := newCluster(node)
 
-	assert.Nil(t, cluster.UpdateLocalState(map[string]string{
+	assert.Nil(t, cluster.UpdateLocalMetadata(map[string]string{
 		"foo": "car",
 		"bar": "boo",
 	}))
 
-	node.State["foo"] = "car"
-	node.State["bar"] = "boo"
+	node.Metadata["foo"] = "car"
+	node.Metadata["bar"] = "boo"
 	nodes := cluster.Nodes()
 	assert.Equal(t, []Node{node}, nodes)
 }
@@ -273,7 +273,7 @@ func TestCluster_Subscribe(t *testing.T) {
 
 	node := randomNode()
 	assert.Nil(t, cluster.AddNode(node))
-	assert.Nil(t, cluster.UpdateState(node.ID, map[string]string{"foo": "bar"}))
+	assert.Nil(t, cluster.UpdateMetadata(node.ID, map[string]string{"foo": "bar"}))
 	cluster.RemoveNode(node.ID)
 
 	assert.Equal(t, 4, count)
@@ -287,7 +287,7 @@ func randomNode() Node {
 		Locality: uuid.New().String(),
 		Created:  rand.Int63(),
 		Revision: uuid.New().String(),
-		State: map[string]string{
+		Metadata: map[string]string{
 			uuid.New().String(): uuid.New().String(),
 			uuid.New().String(): uuid.New().String(),
 			uuid.New().String(): uuid.New().String(),
