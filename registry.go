@@ -130,12 +130,20 @@ func (r *Registry) sync() {
 			return
 		}
 
-		var update nodeUpdate
-		if err := json.Unmarshal(b, &update); err != nil {
+		var m message
+		if err := json.Unmarshal(b, &m); err != nil {
 			continue
 		}
-		if err := r.applyUpdate(&update); err != nil {
-			return
+
+		switch m.MessageType {
+		case messageTypeNodeUpdate:
+			if m.NodeUpdate == nil {
+				continue
+			}
+			if err := r.applyUpdate(m.NodeUpdate); err != nil {
+				continue
+			}
+		default:
 		}
 	}
 }
@@ -152,7 +160,11 @@ func (r *Registry) sendRegisterUpdate(node Node) error {
 		},
 		Metadata: node.Metadata,
 	}
-	b, err := json.Marshal(update)
+	m := &message{
+		MessageType: messageTypeNodeUpdate,
+		NodeUpdate:  update,
+	}
+	b, err := json.Marshal(m)
 	if err != nil {
 		return fmt.Errorf("send register update: encode update: %w", err)
 	}
@@ -168,7 +180,11 @@ func (r *Registry) sendMetadataUpdate(metadata map[string]string) error {
 		UpdateType: updateTypeMetadata,
 		Metadata:   metadata,
 	}
-	b, err := json.Marshal(update)
+	m := &message{
+		MessageType: messageTypeNodeUpdate,
+		NodeUpdate:  update,
+	}
+	b, err := json.Marshal(m)
 	if err != nil {
 		return fmt.Errorf("send metadata update: encode update: %w", err)
 	}
@@ -183,7 +199,11 @@ func (r *Registry) sendUnregisterUpdate() error {
 		ID:         r.nodeID,
 		UpdateType: updateTypeUnregister,
 	}
-	b, err := json.Marshal(update)
+	m := &message{
+		MessageType: messageTypeNodeUpdate,
+		NodeUpdate:  update,
+	}
+	b, err := json.Marshal(m)
 	if err != nil {
 		return fmt.Errorf("send unregister update: encode update: %w", err)
 	}
