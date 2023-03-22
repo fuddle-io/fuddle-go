@@ -15,58 +15,25 @@
 
 // Package fuddle implements an SDK client for the Fuddle service registry.
 //
-// Clients use the SDK to register themselves with Fuddle and discover nodes and
-// services in the cluster.
+// Clients use the SDK to register themselves with Fuddle and discover nodes
+// in the cluster.
 //
-// # Register
+// # Connect
 //
-// Nodes register by passing their registered node state and a list of Fuddle
-// node seed addresses to Register:
+// Clients connect to the Fuddle registry by passing a set of seed addresses of
+// Fuddle servers. Once the client is connected it will receive the nodes in
+// the registry so will discovery any other Fuddle nodes in the cluster to use.
 //
-//	registry, err := fuddle.Register(
-//		// List of Fuddle seed addresses.
+//	client, err := fuddle.Connect(
+//		// Seed addresses of Fuddle servers.
 //		[]string{"192.168.1.1:8220", "192.168.1.2:8220", "192.168.1.3:8220"},
-//		fuddle.Node{
-//			// Attributes describing the local node.
-//			ID:       "orders-32eaba4e",
-//			Service:  "orders",
-//			Locality: "aws.us-east-1-b",
-//			Created:  time.Now().UnixMilli(),
-//			Revision: "v5.1.0-812ebbc",
-//
-//			// Application defined metadata to share as part of service discovery.
-//			Metadata: map[string]string{
-//				"status":           "booting",
-//				"addr.rpc.ip":      "192.168.2.1",
-//				"addr.rpc.port":    "5562",
-//				"protocol.version": "3",
-//			},
-//		},
 //	)
-//
-// This will register the local node so it can be discovered by other nodes in
-// the cluster.
-//
-// The node state includes a set of attributes that can be used for service
-// discovery, such as looking up the nodes in the order service in us-east-1,
-// and observability, such as checking the revision and start time of nodes that
-// are unhealthy. The attributes are immutable so cannot be changed during the
-// lifetime of the node.
-//
-// Nodes also include a map of application defined metadata which is shared with
-// other nodes in the cluster. Such as routing information and protocol version.
-// This metadata may be updated using registry.UpdateLocalMetadata, and the
-// update will be propagated to the other nodes.
-//
-// Remember to unregister the node with registry.Unregister() when it is
-// shutdown to gracefully leave the cluster. Otherwise Fuddle will consider the
-// node as failed rather than unregistered.
 //
 // # Cluster Discovery
 //
-// Once a node has registered, it will receive the state of the other nodes in
-// the cluster and stream updates about changes to the nodes in the registry.
-// Therefore it maintains its own eventually-consistent view of the cluster.
+// Once the client is connected, it will stream the registry state and any
+// updates to the registry. It maintains its own eventually-consistent view of
+// the registry.
 //
 // This cluster state can be queried to receive the set of nodes matching some
 // filter. Users can also subscribe to updates when the registry is updated, due
@@ -74,11 +41,11 @@
 //
 // Lookup a set of nodes:
 //
-//	registry.Nodes(opts)
+//	client.Nodes(opts)
 //
 // Subscribe to changes in a set of nodes:
 //
-//	registry.Subscribe(callback, opts)
+//	client.Subscribe(callback, opts)
 //
 // Note when subscribing the callback will fire immediately with the matching
 // cluster state, so theres no need to call Nodes first.
@@ -114,8 +81,53 @@
 //	}
 //
 //	// Lookup the set of nodes matching the filter.
-//	registry.Nodes(fuddle.WithFilter(filter))
+//	client.Nodes(fuddle.WithFilter(filter))
 //
 //	// Subscribe to updates in the set of nodes matching the filter.
-//	registry.Subscribe(callback, fuddle.WithFilter(filter))
+//	client.Subscribe(callback, fuddle.WithFilter(filter))
+//
+// # Register
+//
+// Clients can register nodes with Fuddle.
+//
+//	node, err := client.Register(fuddle.Node{
+//		ID:       "orders-32eaba4e",
+//		Service:  "orders",
+//		Locality: "aws.us-east-1-b",
+//		Created:  time.Now().UnixMilli(),
+//		Revision: "v5.1.0-812ebbc",
+//		Metadata: map[string]string{
+//			"status":           "booting",
+//			"addr.rpc.ip":      "192.168.2.1",
+//			"addr.rpc.port":    "5562",
+//			"addr.admin.ip":    "192.168.2.1",
+//			"addr.admin.port":  "7723",
+//			"protocol.version": "3",
+//			"instance":         "i-0bc636e38d6c537a7",
+//		},
+//	})
+//	if err != nil {
+//		// handle err ...
+//	}
+//
+// This will register the local node so it can be discovered by other nodes in
+// the cluster.
+//
+// The node state includes a set of attributes that can be used for service
+// discovery, such as looking up the nodes in the order service in us-east-1,
+// and observability, such as checking the revision and start time of nodes that
+// are unhealthy. The attributes are immutable so cannot be changed during the
+// lifetime of the node.
+//
+// Nodes also include a map of application defined metadata which is shared with
+// other nodes in the cluster. Such as routing information and protocol version.
+//
+// Register returns a handle to the registered node, which can be used to
+// update the nodes metadata with node.UpdateMetadata, and unregister the node
+// with node.Unregister.
+//
+// Note when then client is closed it will automatically unregister all nodes
+// registered by the client. Therefore its important to call client.Close before
+// shutting down to unregister the nodes, otherwise Fuddle will think those
+// nodes failed.
 package fuddle

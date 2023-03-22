@@ -24,36 +24,41 @@ import (
 
 // Registers an 'orders' service node in 'us-east-1-b'.
 func Example_registerOrdersServiceNode() {
-	registry, err := fuddle.Register(
+	client, err := fuddle.Connect(
 		// Seed addresses of Fuddle servers.
 		[]string{"192.168.1.1:8220", "192.168.1.2:8220", "192.168.1.3:8220"},
-		fuddle.Node{
-			ID:       "orders-32eaba4e",
-			Service:  "orders",
-			Locality: "aws.us-east-1-b",
-			Created:  time.Now().UnixMilli(),
-			Revision: "v5.1.0-812ebbc",
-			Metadata: map[string]string{
-				"status":           "booting",
-				"addr.rpc.ip":      "192.168.2.1",
-				"addr.rpc.port":    "5562",
-				"addr.admin.ip":    "192.168.2.1",
-				"addr.admin.port":  "7723",
-				"protocol.version": "3",
-				"instance":         "i-0bc636e38d6c537a7",
-			},
-		},
 	)
 	if err != nil {
 		// handle err ...
 	}
-	defer registry.Unregister()
+	defer client.Close()
+
+	node, err := client.Register(fuddle.Node{
+		ID:       "orders-32eaba4e",
+		Service:  "orders",
+		Locality: "aws.us-east-1-b",
+		Created:  time.Now().UnixMilli(),
+		Revision: "v5.1.0-812ebbc",
+		Metadata: map[string]string{
+			"status":           "booting",
+			"addr.rpc.ip":      "192.168.2.1",
+			"addr.rpc.port":    "5562",
+			"addr.admin.ip":    "192.168.2.1",
+			"addr.admin.port":  "7723",
+			"protocol.version": "3",
+			"instance":         "i-0bc636e38d6c537a7",
+		},
+	})
+	if err != nil {
+		// handle err ...
+	}
+	defer node.Unregister()
 
 	// ...
 
 	// Once ready update the nodes status to 'active'. This update will be
 	// propagated to the other nodes in the cluster.
-	err = registry.UpdateLocalMetadata(map[string]string{
+	err = node.UpdateMetadata(map[string]string{
 		"status": "active",
 	})
 	if err != nil {
@@ -61,24 +66,22 @@ func Example_registerOrdersServiceNode() {
 	}
 }
 
-// Registers a 'frontend' service and queries the set of active order service
-// nodes in us-east-1.
+// Queries the set of active order service nodes in us-east-1.
 func Example_lookupOrdersServiceNodes() {
-	registry, err := fuddle.Register(
+	client, err := fuddle.Connect(
 		// Seed addresses of Fuddle servers.
 		[]string{"192.168.1.1:8220", "192.168.1.2:8220", "192.168.1.3:8220"},
-		fuddle.Node{
-			// ...
-		},
 	)
 	if err != nil {
 		// handle err ...
 	}
-	defer registry.Unregister()
+	defer client.Close()
+
+	// ...
 
 	// Filter to only include order service nodes in us-east-1 whose status
 	// is active and protocol version is either 2 or 3.
-	orderNodes := registry.Nodes(fuddle.WithFilter(fuddle.Filter{
+	orderNodes := client.Nodes(fuddle.WithFilter(fuddle.Filter{
 		"order": {
 			Locality: []string{"aws.us-east-1-*"},
 			Metadata: fuddle.MetadataFilter{
@@ -98,20 +101,16 @@ func Example_lookupOrdersServiceNodes() {
 	fmt.Println("order service:", addrs)
 }
 
-// Registers a 'frontend' service and subscribes to the set of active order
-// service nodes in us-east-1.
+// Subscribes to the set of active order service nodes in us-east-1.
 func Example_subscribeToOrdersServiceNodes() {
-	registry, err := fuddle.Register(
+	client, err := fuddle.Connect(
 		// Seed addresses of Fuddle servers.
 		[]string{"192.168.1.1:8220", "192.168.1.2:8220", "192.168.1.3:8220"},
-		fuddle.Node{
-			// ...
-		},
 	)
 	if err != nil {
 		// handle err ...
 	}
-	defer registry.Unregister()
+	defer client.Close()
 
 	filter := fuddle.Filter{
 		"order": {
@@ -126,7 +125,7 @@ func Example_subscribeToOrdersServiceNodes() {
 	// Filter to only include order service nodes in us-east-1 whose status
 	// is active and protocol version is either 2 or 3.
 	var addrs []string
-	registry.Subscribe(func(orderNodes []fuddle.Node) {
+	client.Subscribe(func(orderNodes []fuddle.Node) {
 		addrs = nil
 		for _, node := range orderNodes {
 			addr := node.Metadata["addr.rpc.ip"] + ":" + node.Metadata["addr.rpc.port"]
