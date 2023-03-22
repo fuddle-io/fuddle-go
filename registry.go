@@ -17,13 +17,14 @@ package fuddle
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"sync"
 	"time"
 
-	"github.com/gorilla/websocket"
+	rpc "github.com/fuddle-io/fuddle-rpc/go"
 	multierror "github.com/hashicorp/go-multierror"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 // Registry manages the nodes entry into the cluster registry.
@@ -33,7 +34,8 @@ type Registry struct {
 
 	cluster *cluster
 
-	conn *websocket.Conn
+	conn   *grpc.ClientConn
+	stream rpc.Registry_RegisterClient
 
 	wg sync.WaitGroup
 }
@@ -53,7 +55,7 @@ func Register(addrs []string, node Node, opts ...RegistryOption) (*Registry, err
 		o.apply(options)
 	}
 
-	conn, err := connect(addrs, options.connectTimeout)
+	conn, stream, err := connect(addrs, options.connectTimeout)
 	if err != nil {
 		return nil, fmt.Errorf("registry: %w", err)
 	}
@@ -62,6 +64,7 @@ func Register(addrs []string, node Node, opts ...RegistryOption) (*Registry, err
 		nodeID:  node.ID,
 		cluster: newCluster(node),
 		conn:    conn,
+		stream:  stream,
 		wg:      sync.WaitGroup{},
 	}
 	if err = r.sendRegisterUpdate(node); err != nil {
@@ -125,18 +128,13 @@ func (r *Registry) sync() {
 	defer r.wg.Done()
 
 	for {
-		_, b, err := r.conn.ReadMessage()
+		m, err := r.stream.Recv()
 		if err != nil {
 			return
 		}
 
-		var m message
-		if err := json.Unmarshal(b, &m); err != nil {
-			continue
-		}
-
 		switch m.MessageType {
-		case messageTypeNodeUpdate:
+		case rpc.MessageType_NODE_UPDATE:
 			if m.NodeUpdate == nil {
 				continue
 			}
@@ -149,79 +147,81 @@ func (r *Registry) sync() {
 }
 
 func (r *Registry) sendRegisterUpdate(node Node) error {
-	update := &nodeUpdate{
-		ID:         node.ID,
-		UpdateType: updateTypeRegister,
-		Attributes: &nodeAttributes{
+	metadata := make(map[string]*rpc.VersionedValue)
+	for k, v := range node.Metadata {
+		metadata[k] = &rpc.VersionedValue{
+			Value: v,
+		}
+	}
+
+	update := &rpc.NodeUpdate{
+		NodeId:     node.ID,
+		UpdateType: rpc.NodeUpdateType_REGISTER,
+		Attributes: &rpc.NodeAttributes{
 			Service:  node.Service,
 			Locality: node.Locality,
 			Created:  node.Created,
 			Revision: node.Revision,
 		},
-		Metadata: node.Metadata,
+		Metadata: metadata,
 	}
-	m := &message{
-		MessageType: messageTypeNodeUpdate,
+	m := &rpc.Message{
+		MessageType: rpc.MessageType_NODE_UPDATE,
 		NodeUpdate:  update,
 	}
-	b, err := json.Marshal(m)
-	if err != nil {
-		return fmt.Errorf("send register update: encode update: %w", err)
-	}
-	if err := r.conn.WriteMessage(websocket.BinaryMessage, b); err != nil {
+	if err := r.stream.Send(m); err != nil {
 		return fmt.Errorf("send register update: %w", err)
 	}
 	return nil
 }
 
 func (r *Registry) sendMetadataUpdate(metadata map[string]string) error {
-	update := &nodeUpdate{
-		ID:         r.nodeID,
-		UpdateType: updateTypeMetadata,
-		Metadata:   metadata,
+	rpcMetadata := make(map[string]*rpc.VersionedValue)
+	for k, v := range metadata {
+		rpcMetadata[k] = &rpc.VersionedValue{
+			Value: v,
+		}
 	}
-	m := &message{
-		MessageType: messageTypeNodeUpdate,
+
+	update := &rpc.NodeUpdate{
+		NodeId:     r.nodeID,
+		UpdateType: rpc.NodeUpdateType_METADATA,
+		Metadata:   rpcMetadata,
+	}
+	m := &rpc.Message{
+		MessageType: rpc.MessageType_NODE_UPDATE,
 		NodeUpdate:  update,
 	}
-	b, err := json.Marshal(m)
-	if err != nil {
-		return fmt.Errorf("send metadata update: encode update: %w", err)
-	}
-	if err := r.conn.WriteMessage(websocket.BinaryMessage, b); err != nil {
+	if err := r.stream.Send(m); err != nil {
 		return fmt.Errorf("send metadata update: %w", err)
 	}
 	return nil
 }
 
 func (r *Registry) sendUnregisterUpdate() error {
-	update := &nodeUpdate{
-		ID:         r.nodeID,
-		UpdateType: updateTypeUnregister,
+	update := &rpc.NodeUpdate{
+		NodeId:     r.nodeID,
+		UpdateType: rpc.NodeUpdateType_UNREGISTER,
 	}
-	m := &message{
-		MessageType: messageTypeNodeUpdate,
+	m := &rpc.Message{
+		MessageType: rpc.MessageType_NODE_UPDATE,
 		NodeUpdate:  update,
 	}
-	b, err := json.Marshal(m)
-	if err != nil {
-		return fmt.Errorf("send unregister update: encode update: %w", err)
-	}
-	if err := r.conn.WriteMessage(websocket.BinaryMessage, b); err != nil {
+	if err := r.stream.Send(m); err != nil {
 		return fmt.Errorf("send unregister update: %w", err)
 	}
 	return nil
 }
 
-func (r *Registry) applyUpdate(update *nodeUpdate) error {
+func (r *Registry) applyUpdate(update *rpc.NodeUpdate) error {
 	switch update.UpdateType {
-	case updateTypeRegister:
+	case rpc.NodeUpdateType_REGISTER:
 		if err := r.applyRegisterUpdateLocked(update); err != nil {
 			return err
 		}
-	case updateTypeUnregister:
+	case rpc.NodeUpdateType_UNREGISTER:
 		r.applyUnregisterUpdateLocked(update)
-	case updateTypeMetadata:
+	case rpc.NodeUpdateType_METADATA:
 		if err := r.applyMetadataUpdateLocked(update); err != nil {
 			return err
 		}
@@ -232,8 +232,8 @@ func (r *Registry) applyUpdate(update *nodeUpdate) error {
 	return nil
 }
 
-func (r *Registry) applyRegisterUpdateLocked(update *nodeUpdate) error {
-	if update.ID == "" {
+func (r *Registry) applyRegisterUpdateLocked(update *rpc.NodeUpdate) error {
+	if update.NodeId == "" {
 		return fmt.Errorf("cluster: join update: missing id")
 	}
 
@@ -241,55 +241,65 @@ func (r *Registry) applyRegisterUpdateLocked(update *nodeUpdate) error {
 		return fmt.Errorf("cluster: join update: missing attributes")
 	}
 
+	metadata := make(map[string]string)
+	for k, vv := range update.Metadata {
+		metadata[k] = vv.Value
+	}
 	node := Node{
-		ID:       update.ID,
+		ID:       update.NodeId,
 		Service:  update.Attributes.Service,
 		Locality: update.Attributes.Locality,
 		Revision: update.Attributes.Revision,
 		Created:  update.Attributes.Created,
-		// Copy the state to avoid modifying the update. If update.Metadata is
-		// nil this returns an empty map.
-		Metadata: copyMetadata(update.Metadata),
+		Metadata: metadata,
 	}
 	return r.cluster.AddNode(node)
 }
 
-func (r *Registry) applyUnregisterUpdateLocked(update *nodeUpdate) {
-	r.cluster.RemoveNode(update.ID)
+func (r *Registry) applyUnregisterUpdateLocked(update *rpc.NodeUpdate) {
+	r.cluster.RemoveNode(update.NodeId)
 }
 
-func (r *Registry) applyMetadataUpdateLocked(update *nodeUpdate) error {
+func (r *Registry) applyMetadataUpdateLocked(update *rpc.NodeUpdate) error {
 	// If the update is missing state must ignore it.
 	if update.Metadata == nil {
 		return nil
 	}
-	return r.cluster.UpdateMetadata(update.ID, update.Metadata)
+	metadata := make(map[string]string)
+	for k, vv := range update.Metadata {
+		metadata[k] = vv.Value
+	}
+	return r.cluster.UpdateMetadata(update.NodeId, metadata)
 }
 
-func connect(addrs []string, timeout time.Duration) (*websocket.Conn, error) {
+func connect(addrs []string, timeout time.Duration) (*grpc.ClientConn, rpc.Registry_RegisterClient, error) {
 	var result error
 	for _, addr := range addrs {
-		c, err := connectAddr(addr, timeout)
+		conn, stream, err := connectAddr(addr, timeout)
 		if err != nil {
 			result = multierror.Append(result, err)
 			continue
 		}
 
-		return c, nil
+		return conn, stream, nil
 	}
 
-	return nil, fmt.Errorf("connect: %w", result)
+	return nil, nil, fmt.Errorf("connect: %w", result)
 }
 
-func connectAddr(addr string, timeout time.Duration) (*websocket.Conn, error) {
+func connectAddr(addr string, timeout time.Duration) (*grpc.ClientConn, rpc.Registry_RegisterClient, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	url := "ws://" + addr + "/api/v1/register"
-	c, _, err := websocket.DefaultDialer.DialContext(ctx, url, nil)
+	conn, err := grpc.DialContext(ctx, addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return c, nil
+	stream, err := rpc.NewRegistryClient(conn).Register(context.Background())
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return conn, stream, nil
 }

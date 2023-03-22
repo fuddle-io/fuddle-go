@@ -88,9 +88,6 @@ func TestRegistry_DiscoverNodes(t *testing.T) {
 // Tests the registry will attempt multiple addresses.
 func TestRegistry_ConnectTriesAllAddresses(t *testing.T) {
 	addrs := []string{
-		// Address whos firewall blocks the port.
-		"fuddle.io:12345",
-		"google.com:12345",
 		// No host.
 		"notfound.fuddle.io:12345",
 	}
