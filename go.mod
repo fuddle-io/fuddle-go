@@ -3,7 +3,7 @@ module github.com/fuddle-io/fuddle-go
 go 1.20
 
 require (
-	github.com/fuddle-io/fuddle-rpc/go v0.0.0-20230322065350-85501b751765
+	github.com/fuddle-io/fuddle-rpc/go v0.0.0-20230323053844-a7eb3fce9135
 	github.com/google/uuid v1.3.0
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/stretchr/testify v1.8.2
@@ -15,6 +15,9 @@ require (
 	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/hashicorp/errwrap v1.0.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
+	go.uber.org/atomic v1.7.0 // indirect
+	go.uber.org/multierr v1.6.0 // indirect
+	go.uber.org/zap v1.24.0 // indirect
 	golang.org/x/net v0.5.0 // indirect
 	golang.org/x/sys v0.4.0 // indirect
 	golang.org/x/text v0.6.0 // indirect
@@ -22,5 +25,3 @@ require (
 	google.golang.org/protobuf v1.30.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
-
-replace github.com/fuddle-io/fuddle-rpc/go v0.0.0-20230321084119-bb863b3c13f6 => ../fuddle-rpc/go

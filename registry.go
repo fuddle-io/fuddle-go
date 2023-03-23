@@ -47,8 +47,8 @@ type Registry struct {
 // updates to maintain a local eventually consistent view of the cluster.
 //
 // The given addresses are a set of seed addresses for Fuddle nodes.
-func Register(addrs []string, node Node, opts ...RegistryOption) (*Registry, error) {
-	options := &registryOptions{
+func Register(addrs []string, node Node, opts ...Option) (*Registry, error) {
+	options := &options{
 		connectTimeout: time.Millisecond * 1000,
 	}
 	for _, o := range opts {
@@ -79,7 +79,7 @@ func Register(addrs []string, node Node, opts ...RegistryOption) (*Registry, err
 }
 
 // Nodes returns the set of nodes in the cluster.
-func (r *Registry) Nodes(opts ...NodesOption) []Node {
+func (r *Registry) Nodes(opts ...Option) []Node {
 	return r.cluster.Nodes(opts...)
 }
 
@@ -92,7 +92,7 @@ func (r *Registry) Nodes(opts ...NodesOption) []Node {
 // Note the callback is called synchronously with the registry mutex held,
 // therefore it must NOT block or callback to the registry (or it will
 // deadlock).
-func (r *Registry) Subscribe(cb func(nodes []Node), opts ...NodesOption) func() {
+func (r *Registry) Subscribe(cb func(nodes []Node), opts ...Option) func() {
 	return r.cluster.Subscribe(cb, opts...)
 }
 

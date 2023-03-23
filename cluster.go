@@ -23,7 +23,7 @@ import (
 // subHandle is a handle for a cluster update subscriber.
 type subHandle struct {
 	Callback func(nodes []Node)
-	Options  []NodesOption
+	Options  []Option
 }
 
 // cluster maintains the registry clients view of the cluster.
@@ -52,7 +52,7 @@ func newCluster(node Node) *cluster {
 }
 
 // Nodes returns the set of nodes in the cluster.
-func (c *cluster) Nodes(opts ...NodesOption) []Node {
+func (c *cluster) Nodes(opts ...Option) []Node {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -65,7 +65,7 @@ func (c *cluster) Nodes(opts ...NodesOption) []Node {
 // Note the callback is called synchronously with the registry mutex held,
 // therefore it must NOT block or callback to the registry (or it will
 // deadlock).
-func (c *cluster) Subscribe(cb func(nodes []Node), opts ...NodesOption) func() {
+func (c *cluster) Subscribe(cb func(nodes []Node), opts ...Option) func() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -127,8 +127,8 @@ func (c *cluster) UpdateMetadata(id string, update map[string]string) error {
 	return nil
 }
 
-func (c *cluster) nodesLocked(opts ...NodesOption) []Node {
-	options := &nodesOptions{}
+func (c *cluster) nodesLocked(opts ...Option) []Node {
+	options := &options{}
 	for _, o := range opts {
 		o.apply(options)
 	}

@@ -16,6 +16,7 @@
 package fuddle_test
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -33,7 +34,7 @@ func Example_registerOrdersServiceNode() {
 	}
 	defer client.Close()
 
-	node, err := client.Register(fuddle.Node{
+	node, err := client.Register(context.TODO(), fuddle.Node{
 		ID:       "orders-32eaba4e",
 		Service:  "orders",
 		Locality: "aws.us-east-1-b",
@@ -52,13 +53,13 @@ func Example_registerOrdersServiceNode() {
 	if err != nil {
 		// handle err ...
 	}
-	defer node.Unregister()
+	defer node.Unregister(context.TODO())
 
 	// ...
 
 	// Once ready update the nodes status to 'active'. This update will be
 	// propagated to the other nodes in the cluster.
-	err = node.UpdateMetadata(map[string]string{
+	err = node.UpdateMetadata(context.TODO(), map[string]string{
 		"status": "active",
 	})
 	if err != nil {
