@@ -29,7 +29,7 @@ func TestRegistry_RegisterThenQueryNode(t *testing.T) {
 	r := newRegistry()
 
 	registeredNode := randomNode()
-	r.ApplyUpdate(nodeToRegisterUpdate(registeredNode))
+	r.ApplyRemoteUpdate(nodeToRegisterUpdate(registeredNode))
 
 	n, ok := r.Node(registeredNode.ID)
 	assert.True(t, ok)
@@ -40,8 +40,8 @@ func TestRegistry_RegisterThenUnregister(t *testing.T) {
 	r := newRegistry()
 
 	registeredNode := randomNode()
-	r.ApplyUpdate(nodeToRegisterUpdate(registeredNode))
-	r.ApplyUpdate(nodeToUnregisterUpdate(registeredNode))
+	r.ApplyRemoteUpdate(nodeToRegisterUpdate(registeredNode))
+	r.ApplyRemoteUpdate(nodeToUnregisterUpdate(registeredNode))
 
 	_, ok := r.Node(registeredNode.ID)
 	assert.False(t, ok)
@@ -58,10 +58,10 @@ func TestRegistry_UpdateNodeMetadata(t *testing.T) {
 	r := newRegistry()
 
 	registeredNode := randomNode()
-	r.ApplyUpdate(nodeToRegisterUpdate(registeredNode))
+	r.ApplyRemoteUpdate(nodeToRegisterUpdate(registeredNode))
 
 	update := randomMetadata()
-	r.ApplyUpdate(metadataToMetadataUpdate(registeredNode.ID, update))
+	r.ApplyRemoteUpdate(metadataToMetadataUpdate(registeredNode.ID, update))
 
 	expectedNode := registeredNode
 	for k, v := range update {
@@ -201,7 +201,7 @@ func TestRegistry_NodesLookupWithFilter(t *testing.T) {
 	for _, tt := range tests {
 		r := newRegistry()
 		for _, n := range tt.AddedNodes {
-			r.ApplyUpdate(nodeToRegisterUpdate(n))
+			r.ApplyRemoteUpdate(nodeToRegisterUpdate(n))
 		}
 
 		nodes := r.Nodes(WithFilter(tt.Filter))
@@ -210,6 +210,90 @@ func TestRegistry_NodesLookupWithFilter(t *testing.T) {
 		})
 		assert.Equal(t, tt.FilteredNodes, nodes)
 	}
+}
+
+func TestRegistry_RegisterLocal(t *testing.T) {
+	r := newRegistry()
+
+	registeredNode := randomNode()
+	r.RegisterLocal(registeredNode.ToRPCNode())
+
+	n, ok := r.Node(registeredNode.ID)
+	assert.True(t, ok)
+	assert.Equal(t, n, registeredNode)
+
+	assert.Equal(t, []string{registeredNode.ID}, r.LocalNodeIDs())
+}
+
+func TestRegistry_UnregisterLocal(t *testing.T) {
+	r := newRegistry()
+
+	registeredNode := randomNode()
+	r.RegisterLocal(registeredNode.ToRPCNode())
+	r.UnregisterLocal(registeredNode.ID)
+
+	_, ok := r.Node(registeredNode.ID)
+	assert.False(t, ok)
+
+	assert.Equal(t, []string(nil), r.LocalNodeIDs())
+}
+
+func TestRegistry_UpdateMetadataLocal(t *testing.T) {
+	r := newRegistry()
+
+	registeredNode := randomNode()
+	r.RegisterLocal(registeredNode.ToRPCNode())
+
+	update := randomMetadata()
+	r.UpdateMetadataLocal(registeredNode.ID, update)
+
+	expectedNode := registeredNode
+	for k, v := range update {
+		expectedNode.Metadata[k] = v
+	}
+
+	n, ok := r.Node(expectedNode.ID)
+	assert.True(t, ok)
+	assert.Equal(t, n, expectedNode)
+}
+
+func TestRegistry_RemoteUpdatesToLocalNodesIgnored(t *testing.T) {
+	r := newRegistry()
+
+	registeredNode := randomNode()
+	r.RegisterLocal(registeredNode.ToRPCNode())
+
+	n, ok := r.Node(registeredNode.ID)
+	assert.True(t, ok)
+	assert.Equal(t, n, registeredNode)
+
+	// Attempt to register another node with the same ID, which should be
+	// ignored.
+	duplicateNode := randomNode()
+	duplicateNode.ID = registeredNode.ID
+	r.ApplyRemoteUpdate(nodeToRegisterUpdate(duplicateNode))
+
+	// The node should not have been updated.
+	n, ok = r.Node(registeredNode.ID)
+	assert.True(t, ok)
+	assert.Equal(t, n, registeredNode)
+
+	// Attempt to update the node metadata, which should be ignored.
+	update := randomMetadata()
+	r.ApplyRemoteUpdate(metadataToMetadataUpdate(registeredNode.ID, update))
+
+	// The node should not have been updated.
+	n, ok = r.Node(registeredNode.ID)
+	assert.True(t, ok)
+	assert.Equal(t, n, registeredNode)
+
+	// Attempt to unregister the node, which should be ignored.
+	r.ApplyRemoteUpdate(nodeToUnregisterUpdate(registeredNode))
+
+	// The node should not have been updated.
+	n, ok = r.Node(registeredNode.ID)
+	assert.True(t, ok)
+	assert.Equal(t, n, registeredNode)
 }
 
 func randomNode() Node {

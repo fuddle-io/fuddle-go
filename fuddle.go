@@ -120,25 +120,9 @@ func (f *Fuddle) Register(ctx context.Context, node Node) (*LocalNode, error) {
 		node.Metadata = make(map[string]string)
 	}
 
-	// Versions only set by the registry so leave as 0.
-	versionedMetadata := make(map[string]*rpc.VersionedValue)
-	for k, v := range node.Metadata {
-		versionedMetadata[k] = &rpc.VersionedValue{
-			Value: v,
-		}
-	}
-
+	rpcNode := node.ToRPCNode()
 	req := &rpc.RegisterRequest{
-		Node: &rpc.Node{
-			Id: node.ID,
-			Attributes: &rpc.NodeAttributes{
-				Service:  node.Service,
-				Locality: node.Locality,
-				Created:  node.Created,
-				Revision: node.Revision,
-			},
-			Metadata: versionedMetadata,
-		},
+		Node: rpcNode,
 	}
 	resp, err := f.client.Register(ctx, req)
 	if err != nil {
@@ -160,9 +144,11 @@ func (f *Fuddle) Register(ctx context.Context, node Node) (*LocalNode, error) {
 		return nil, fmt.Errorf("fuddle: register: %s", resp.Error.Description)
 	}
 
+	f.registry.RegisterLocal(rpcNode)
+
 	f.logger.Debug("node registered", zap.String("id", node.ID))
 
-	return newLocalNode(node.ID, f.client, f.logger), nil
+	return newLocalNode(node.ID, f.client, f.registry, f.logger), nil
 }
 
 // Close closes the connection to the server and unregisters any registered
@@ -195,7 +181,7 @@ func (f *Fuddle) streamUpdates(stream rpc.Registry_UpdatesClient) {
 			zap.String("update-type", update.UpdateType.String()),
 		)
 
-		f.registry.ApplyUpdate(update)
+		f.registry.ApplyRemoteUpdate(update)
 	}
 }
 
@@ -205,7 +191,20 @@ func (f *Fuddle) heartbeats(interval time.Duration) {
 	for {
 		select {
 		case <-ticker.C:
-			f.logger.Debug("send heartbeat")
+			f.logger.Debug(
+				"send heartbeat",
+				zap.Strings("nodes", f.registry.LocalNodeIDs()),
+			)
+
+			_, err := f.client.Heartbeat(context.TODO(), &rpc.HeartbeatRequest{
+				Heartbeat: &rpc.Heartbeat{
+					Timestamp: time.Now().UnixMilli(),
+				},
+				Nodes: f.registry.LocalNodeIDs(),
+			})
+			if err != nil {
+				f.logger.Error("heartbeat failed", zap.Error(err))
+			}
 		case <-f.done:
 			return
 		}

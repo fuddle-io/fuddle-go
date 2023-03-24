@@ -25,16 +25,18 @@ import (
 
 // LocalNode manages a local nodes entry into the registry.
 type LocalNode struct {
-	id     string
-	client rpc.RegistryClient
-	logger *zap.Logger
+	id       string
+	client   rpc.RegistryClient
+	registry *registry
+	logger   *zap.Logger
 }
 
-func newLocalNode(id string, client rpc.RegistryClient, logger *zap.Logger) *LocalNode {
+func newLocalNode(id string, client rpc.RegistryClient, registry *registry, logger *zap.Logger) *LocalNode {
 	return &LocalNode{
-		id:     id,
-		client: client,
-		logger: logger,
+		id:       id,
+		client:   client,
+		registry: registry,
+		logger:   logger,
 	}
 }
 
@@ -66,6 +68,8 @@ func (n *LocalNode) UpdateMetadata(ctx context.Context, update map[string]string
 		return fmt.Errorf("fuddle: update metadata: %s", resp.Error.Description)
 	}
 
+	n.registry.UpdateMetadataLocal(n.id, update)
+
 	n.logger.Debug("node metadata updated", zap.String("id", n.id))
 
 	return nil
@@ -95,6 +99,8 @@ func (n *LocalNode) Unregister(ctx context.Context) error {
 
 		return fmt.Errorf("fuddle: unregister: %s", resp.Error.Description)
 	}
+
+	n.registry.UnregisterLocal(n.id)
 
 	n.logger.Debug("node unregistered", zap.String("id", n.id))
 

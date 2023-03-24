@@ -28,6 +28,8 @@ type subscriber struct {
 
 type registry struct {
 	nodes map[string]*rpc.Node
+	// localNodes is a set containing the nodes registered by this client.
+	localNodes map[string]interface{}
 
 	subscribers map[*subscriber]interface{}
 
@@ -38,6 +40,7 @@ type registry struct {
 func newRegistry() *registry {
 	return &registry{
 		nodes:       make(map[string]*rpc.Node),
+		localNodes:  make(map[string]interface{}),
 		subscribers: make(map[*subscriber]interface{}),
 	}
 }
@@ -57,6 +60,17 @@ func (r *registry) Nodes(opts ...Option) []Node {
 	defer r.mu.Unlock()
 
 	return r.nodesLocked(opts...)
+}
+
+func (r *registry) LocalNodeIDs() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	var ids []string
+	for id := range r.localNodes {
+		ids = append(ids, id)
+	}
+	return ids
 }
 
 func (r *registry) Subscribe(cb func(nodes []Node), opts ...Option) func() {
@@ -79,43 +93,77 @@ func (r *registry) Subscribe(cb func(nodes []Node), opts ...Option) func() {
 	}
 }
 
-func (r *registry) ApplyUpdate(update *rpc.NodeUpdate) {
-	switch update.UpdateType {
-	case rpc.NodeUpdateType_REGISTER:
-		r.applyRegisterUpdate(update)
-	case rpc.NodeUpdateType_UNREGISTER:
-		r.applyUnregisterUpdate(update)
-	case rpc.NodeUpdateType_METADATA:
-		r.applyMetadataUpdate(update)
-	}
-}
-
-func (r *registry) applyRegisterUpdate(update *rpc.NodeUpdate) {
+func (r *registry) ApplyRemoteUpdate(update *rpc.NodeUpdate) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	// Ignore updates about local nodes.
+	if _, ok := r.localNodes[update.NodeId]; ok {
+		return
+	}
+
+	switch update.UpdateType {
+	case rpc.NodeUpdateType_REGISTER:
+		r.applyRegisterUpdateLocked(update)
+	case rpc.NodeUpdateType_UNREGISTER:
+		r.applyUnregisterUpdateLocked(update)
+	case rpc.NodeUpdateType_METADATA:
+		r.applyMetadataUpdateLocked(update)
+	}
+
+	r.notifySubscribersLocked()
+}
+
+func (r *registry) RegisterLocal(node *rpc.Node) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.nodes[node.Id] = node
+	r.localNodes[node.Id] = struct{}{}
+
+	r.notifySubscribersLocked()
+}
+
+func (r *registry) UnregisterLocal(nodeID string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	delete(r.nodes, nodeID)
+	delete(r.localNodes, nodeID)
+
+	r.notifySubscribersLocked()
+}
+
+func (r *registry) UpdateMetadataLocal(nodeID string, metadata map[string]string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	node, ok := r.nodes[nodeID]
+	if !ok {
+		return
+	}
+
+	// Versions are ignored for the local node.
+	for k, v := range metadata {
+		node.Metadata[k] = &rpc.VersionedValue{
+			Value: v,
+		}
+	}
+}
+
+func (r *registry) applyRegisterUpdateLocked(update *rpc.NodeUpdate) {
 	r.nodes[update.NodeId] = &rpc.Node{
 		Id:         update.NodeId,
 		Attributes: update.Attributes,
 		Metadata:   update.Metadata,
 	}
-
-	r.notifySubscribersLocked()
 }
 
-func (r *registry) applyUnregisterUpdate(update *rpc.NodeUpdate) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
+func (r *registry) applyUnregisterUpdateLocked(update *rpc.NodeUpdate) {
 	delete(r.nodes, update.NodeId)
-
-	r.notifySubscribersLocked()
 }
 
-func (r *registry) applyMetadataUpdate(update *rpc.NodeUpdate) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
+func (r *registry) applyMetadataUpdateLocked(update *rpc.NodeUpdate) {
 	node, ok := r.nodes[update.NodeId]
 	if !ok {
 		return
@@ -124,8 +172,6 @@ func (r *registry) applyMetadataUpdate(update *rpc.NodeUpdate) {
 	for k, vv := range update.Metadata {
 		node.Metadata[k] = vv
 	}
-
-	r.notifySubscribersLocked()
 }
 
 func (r *registry) nodesLocked(opts ...Option) []Node {
