@@ -33,6 +33,8 @@ type Fuddle struct {
 	conn   *grpc.ClientConn
 	client rpc.RegistryClient
 
+	registry *registry
+
 	logger *zap.Logger
 }
 
@@ -50,7 +52,8 @@ func Connect(addrs []string, opts ...Option) (*Fuddle, error) {
 	}
 
 	fuddle := &Fuddle{
-		logger: options.logger,
+		registry: newRegistry(),
+		logger:   options.logger,
 	}
 
 	conn, err := fuddle.rpcConnect(addrs, options.connectTimeout)
@@ -60,12 +63,22 @@ func Connect(addrs []string, opts ...Option) (*Fuddle, error) {
 
 	fuddle.conn = conn
 	fuddle.client = rpc.NewRegistryClient(conn)
+
+	updateStream, err := fuddle.client.Updates(
+		context.Background(), &rpc.UpdatesRequest{},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("fuddle: update stream: %w", err)
+	}
+
+	go fuddle.streamUpdates(updateStream)
+
 	return fuddle, nil
 }
 
 // Nodes returns the set of nodes in the cluster.
 func (f *Fuddle) Nodes(opts ...Option) []Node {
-	return nil
+	return f.registry.Nodes(opts...)
 }
 
 // Subscribe registers the given callback to fire when the registry state
@@ -78,7 +91,7 @@ func (f *Fuddle) Nodes(opts ...Option) []Node {
 // therefore it must NOT block or callback to the registry (or it will
 // deadlock).
 func (f *Fuddle) Subscribe(cb func(nodes []Node), opts ...Option) func() {
-	return nil
+	return f.registry.Subscribe(cb, opts...)
 }
 
 // Register registers the given node and returns a reference to the node so
@@ -141,6 +154,24 @@ func (f *Fuddle) Register(ctx context.Context, node Node) (*LocalNode, error) {
 // of left.
 func (f *Fuddle) Close() {
 	f.conn.Close()
+}
+
+func (f *Fuddle) streamUpdates(stream rpc.Registry_UpdatesClient) {
+	for {
+		update, err := stream.Recv()
+		if err != nil {
+			f.logger.Error("stream error", zap.Error(err))
+			return
+		}
+
+		f.logger.Debug(
+			"received update",
+			zap.String("id", update.NodeId),
+			zap.String("update-type", update.UpdateType.String()),
+		)
+
+		f.registry.ApplyUpdate(update)
+	}
 }
 
 func (f *Fuddle) rpcConnect(addrs []string, timeout time.Duration) (*grpc.ClientConn, error) {

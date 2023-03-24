@@ -15,6 +15,10 @@
 
 package fuddle
 
+import (
+	rpc "github.com/fuddle-io/fuddle-rpc/go"
+)
+
 // Node represents the state of a node in the cluster.
 //
 // It includes both fixed attributes of the node, and mutable application
@@ -74,6 +78,21 @@ func (s *Node) Copy() Node {
 	cp := *s
 	cp.Metadata = copyMetadata(s.Metadata)
 	return cp
+}
+
+func NodeFromRPC(rpcNode *rpc.Node) Node {
+	metadata := make(map[string]string)
+	for k, vv := range rpcNode.Metadata {
+		metadata[k] = vv.Value
+	}
+	return Node{
+		ID:       rpcNode.Id,
+		Service:  rpcNode.Attributes.Service,
+		Locality: rpcNode.Attributes.Locality,
+		Created:  rpcNode.Attributes.Created,
+		Revision: rpcNode.Attributes.Revision,
+		Metadata: metadata,
+	}
 }
 
 func copyMetadata(s map[string]string) map[string]string {

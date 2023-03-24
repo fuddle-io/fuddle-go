@@ -18,15 +18,41 @@
 package fuddle
 
 import (
+	"context"
+	"fmt"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 const (
 	clusterAddr = "127.0.0.1:8220"
 )
+
+func TestFuddle_RegisterAndReceiveUpdate(t *testing.T) {
+	observerConn, err := Connect([]string{clusterAddr})
+	require.NoError(t, err)
+	defer observerConn.Close()
+
+	registerConn, err := Connect([]string{clusterAddr})
+	require.NoError(t, err)
+	defer registerConn.Close()
+
+	registeredNode := randomNode()
+	n, err := registerConn.Register(context.TODO(), registeredNode)
+	assert.NoError(t, err)
+
+	receivedNode, err := waitForNode(observerConn, registeredNode.ID)
+	assert.NoError(t, err)
+
+	assert.Equal(t, receivedNode, registeredNode)
+
+	assert.NoError(t, n.Unregister(context.TODO()))
+
+	assert.NoError(t, waitForCount(observerConn, 0))
+}
 
 // Tests the client connection will succeed even if some of the seed addresses
 // are wrong.
@@ -60,4 +86,61 @@ func TestFuddle_ConnectNoAddresses(t *testing.T) {
 	addrs := []string{}
 	_, err := Connect(addrs, WithConnectTimeout(time.Millisecond*100))
 	require.Error(t, err)
+}
+
+func waitForNode(client *Fuddle, id string) (Node, error) {
+	var node Node
+	found := false
+	recvCh := make(chan interface{})
+	unsubscribe := client.Subscribe(func(nodes []Node) {
+		if found {
+			return
+		}
+
+		for _, n := range nodes {
+			if n.ID == id {
+				found = true
+				node = n
+				close(recvCh)
+				return
+			}
+		}
+	})
+	defer unsubscribe()
+
+	if err := waitWithTimeout(recvCh, time.Millisecond*500); err != nil {
+		return node, err
+	}
+	return node, nil
+}
+
+func waitForCount(client *Fuddle, count int) error {
+	found := false
+	recvCh := make(chan interface{})
+	unsubscribe := client.Subscribe(func(nodes []Node) {
+		if found {
+			return
+		}
+
+		if len(nodes) == count {
+			found = true
+			close(recvCh)
+			return
+		}
+	})
+	defer unsubscribe()
+
+	if err := waitWithTimeout(recvCh, time.Millisecond*500); err != nil {
+		return err
+	}
+	return nil
+}
+
+func waitWithTimeout(ch chan interface{}, timeout time.Duration) error {
+	select {
+	case <-ch:
+		return nil
+	case <-time.After(timeout):
+		return fmt.Errorf("timeout")
+	}
 }
