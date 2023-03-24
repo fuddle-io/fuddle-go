@@ -13,126 +13,266 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-package fuddle_test
+package fuddle
 
 import (
-	"fmt"
-	"time"
+	"math/rand"
+	"sort"
+	"testing"
 
-	fuddle "github.com/fuddle-io/fuddle-go"
+	rpc "github.com/fuddle-io/fuddle-rpc/go"
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
 )
 
-// Registers an 'orders' service node in 'us-east-1-b'.
-func Example_registerOrdersServiceNode() {
-	registry, err := fuddle.Register(
-		// Seed addresses of Fuddle servers.
-		[]string{"192.168.1.1:8220", "192.168.1.2:8220", "192.168.1.3:8220"},
-		fuddle.Node{
-			ID:       "orders-32eaba4e",
-			Service:  "orders",
-			Locality: "aws.us-east-1-b",
-			Created:  time.Now().UnixMilli(),
-			Revision: "v5.1.0-812ebbc",
-			Metadata: map[string]string{
-				"status":           "booting",
-				"addr.rpc.ip":      "192.168.2.1",
-				"addr.rpc.port":    "5562",
-				"addr.admin.ip":    "192.168.2.1",
-				"addr.admin.port":  "7723",
-				"protocol.version": "3",
-				"instance":         "i-0bc636e38d6c537a7",
-			},
-		},
-	)
-	if err != nil {
-		// handle err ...
-	}
-	defer registry.Unregister()
+func TestRegistry_RegisterThenQueryNode(t *testing.T) {
+	r := newRegistry()
 
-	// ...
+	registeredNode := randomNode()
+	r.ApplyUpdate(nodeToRegisterUpdate(registeredNode))
 
-	// Once ready update the nodes status to 'active'. This update will be
-	// propagated to the other nodes in the cluster.
-	err = registry.UpdateLocalMetadata(map[string]string{
-		"status": "active",
-	})
-	if err != nil {
-		// handle err ...
-	}
+	n, ok := r.Node(registeredNode.ID)
+	assert.True(t, ok)
+	assert.Equal(t, n, registeredNode)
 }
 
-// Registers a 'frontend' service and queries the set of active order service
-// nodes in us-east-1.
-func Example_lookupOrdersServiceNodes() {
-	registry, err := fuddle.Register(
-		// Seed addresses of Fuddle servers.
-		[]string{"192.168.1.1:8220", "192.168.1.2:8220", "192.168.1.3:8220"},
-		fuddle.Node{
-			// ...
-		},
-	)
-	if err != nil {
-		// handle err ...
-	}
-	defer registry.Unregister()
+func TestRegistry_RegisterThenUnregister(t *testing.T) {
+	r := newRegistry()
 
-	// Filter to only include order service nodes in us-east-1 whose status
-	// is active and protocol version is either 2 or 3.
-	orderNodes := registry.Nodes(fuddle.WithFilter(fuddle.Filter{
-		"order": {
-			Locality: []string{"aws.us-east-1-*"},
-			Metadata: fuddle.MetadataFilter{
-				"status":           []string{"active"},
-				"protocol.version": []string{"2", "3"},
-			},
-		},
-	}))
-	addrs := []string{}
-	for _, node := range orderNodes {
-		addr := node.Metadata["addr.rpc.ip"] + ":" + node.Metadata["addr.rpc.port"]
-		addrs = append(addrs, addr)
-	}
+	registeredNode := randomNode()
+	r.ApplyUpdate(nodeToRegisterUpdate(registeredNode))
+	r.ApplyUpdate(nodeToUnregisterUpdate(registeredNode))
 
-	// ...
-
-	fmt.Println("order service:", addrs)
+	_, ok := r.Node(registeredNode.ID)
+	assert.False(t, ok)
 }
 
-// Registers a 'frontend' service and subscribes to the set of active order
-// service nodes in us-east-1.
-func Example_subscribeToOrdersServiceNodes() {
-	registry, err := fuddle.Register(
-		// Seed addresses of Fuddle servers.
-		[]string{"192.168.1.1:8220", "192.168.1.2:8220", "192.168.1.3:8220"},
-		fuddle.Node{
-			// ...
-		},
-	)
-	if err != nil {
-		// handle err ...
-	}
-	defer registry.Unregister()
+func TestRegistry_NodeNotFound(t *testing.T) {
+	r := newRegistry()
 
-	filter := fuddle.Filter{
-		"order": {
-			Locality: []string{"aws.us-east-1-*"},
-			Metadata: fuddle.MetadataFilter{
-				"status":           []string{"active"},
-				"protocol.version": []string{"2", "3"},
+	_, ok := r.Node("foo")
+	assert.False(t, ok)
+}
+
+func TestRegistry_UpdateNodeMetadata(t *testing.T) {
+	r := newRegistry()
+
+	registeredNode := randomNode()
+	r.ApplyUpdate(nodeToRegisterUpdate(registeredNode))
+
+	update := randomMetadata()
+	r.ApplyUpdate(metadataToMetadataUpdate(registeredNode.ID, update))
+
+	expectedNode := registeredNode
+	for k, v := range update {
+		expectedNode.Metadata[k] = v
+	}
+
+	n, ok := r.Node(expectedNode.ID)
+	assert.True(t, ok)
+	assert.Equal(t, n, expectedNode)
+}
+
+func TestRegistry_NodesLookupWithFilter(t *testing.T) {
+	tests := []struct {
+		Filter        Filter
+		AddedNodes    []Node
+		FilteredNodes []Node
+	}{
+		// Filter no nodes.
+		{
+			Filter: Filter{
+				"service-1": {
+					Locality: []string{"eu-west-1-*", "eu-west-2-*"},
+					Metadata: MetadataFilter{
+						"foo": []string{"bar", "car", "boo"},
+					},
+				},
+				"service-2": {
+					Locality: []string{"us-east-1-*", "eu-west-2-*"},
+					Metadata: MetadataFilter{
+						"bar": []string{"bar", "car", "boo"},
+					},
+				},
+			},
+			AddedNodes: []Node{
+				Node{
+					ID:       "1",
+					Service:  "service-1",
+					Locality: "eu-west-2-c",
+					Metadata: map[string]string{
+						"foo": "car",
+					},
+				},
+				Node{
+					ID:       "2",
+					Service:  "service-2",
+					Locality: "us-east-1-c",
+					Metadata: map[string]string{
+						"bar": "boo",
+					},
+				},
+			},
+			FilteredNodes: []Node{
+				Node{
+					ID:       "1",
+					Service:  "service-1",
+					Locality: "eu-west-2-c",
+					Metadata: map[string]string{
+						"foo": "car",
+					},
+				},
+				Node{
+					ID:       "2",
+					Service:  "service-2",
+					Locality: "us-east-1-c",
+					Metadata: map[string]string{
+						"bar": "boo",
+					},
+				},
 			},
 		},
+
+		// Filter partial nodes.
+		{
+			Filter: Filter{
+				"service-1": {
+					Locality: []string{"eu-west-1-*", "eu-west-2-*"},
+					Metadata: MetadataFilter{
+						"foo": []string{"bar", "car", "boo"},
+					},
+				},
+			},
+			AddedNodes: []Node{
+				Node{
+					ID:       "1",
+					Service:  "service-1",
+					Locality: "eu-west-2-c",
+					Metadata: map[string]string{
+						"foo": "car",
+					},
+				},
+				Node{
+					ID:       "2",
+					Service:  "service-2",
+					Locality: "us-east-1-c",
+					Metadata: map[string]string{
+						"bar": "boo",
+					},
+				},
+			},
+			FilteredNodes: []Node{
+				Node{
+					ID:       "1",
+					Service:  "service-1",
+					Locality: "eu-west-2-c",
+					Metadata: map[string]string{
+						"foo": "car",
+					},
+				},
+			},
+		},
+
+		// Filter all nodes.
+		{
+			Filter: Filter{},
+			AddedNodes: []Node{
+				Node{
+					ID:       "1",
+					Service:  "service-1",
+					Locality: "eu-west-2-c",
+					Metadata: map[string]string{
+						"foo": "car",
+					},
+				},
+				Node{
+					ID:       "2",
+					Service:  "service-2",
+					Locality: "us-east-1-c",
+					Metadata: map[string]string{
+						"bar": "boo",
+					},
+				},
+			},
+			FilteredNodes: []Node{},
+		},
 	}
 
-	// Filter to only include order service nodes in us-east-1 whose status
-	// is active and protocol version is either 2 or 3.
-	var addrs []string
-	registry.Subscribe(func(orderNodes []fuddle.Node) {
-		addrs = nil
-		for _, node := range orderNodes {
-			addr := node.Metadata["addr.rpc.ip"] + ":" + node.Metadata["addr.rpc.port"]
-			addrs = append(addrs, addr)
+	for _, tt := range tests {
+		r := newRegistry()
+		for _, n := range tt.AddedNodes {
+			r.ApplyUpdate(nodeToRegisterUpdate(n))
 		}
 
-		fmt.Println("order service:", addrs)
-	}, fuddle.WithFilter(filter))
+		nodes := r.Nodes(WithFilter(tt.Filter))
+		sort.Slice(nodes, func(i, j int) bool {
+			return nodes[i].ID < nodes[j].ID
+		})
+		assert.Equal(t, tt.FilteredNodes, nodes)
+	}
+}
+
+func randomNode() Node {
+	return Node{
+		ID:       uuid.New().String(),
+		Service:  uuid.New().String(),
+		Locality: uuid.New().String(),
+		Created:  rand.Int63(),
+		Revision: uuid.New().String(),
+		Metadata: randomMetadata(),
+	}
+}
+
+func randomMetadata() map[string]string {
+	return map[string]string{
+		uuid.New().String(): uuid.New().String(),
+		uuid.New().String(): uuid.New().String(),
+		uuid.New().String(): uuid.New().String(),
+		uuid.New().String(): uuid.New().String(),
+		uuid.New().String(): uuid.New().String(),
+	}
+}
+
+func nodeToRegisterUpdate(node Node) *rpc.NodeUpdate {
+	metadata := make(map[string]*rpc.VersionedValue)
+	for k, v := range node.Metadata {
+		metadata[k] = &rpc.VersionedValue{
+			Value: v,
+		}
+	}
+
+	return &rpc.NodeUpdate{
+		NodeId:     node.ID,
+		UpdateType: rpc.NodeUpdateType_REGISTER,
+		Version:    0,
+		Attributes: &rpc.NodeAttributes{
+			Service:  node.Service,
+			Locality: node.Locality,
+			Created:  node.Created,
+			Revision: node.Revision,
+		},
+		Metadata: metadata,
+	}
+}
+
+func nodeToUnregisterUpdate(node Node) *rpc.NodeUpdate {
+	return &rpc.NodeUpdate{
+		NodeId:     node.ID,
+		UpdateType: rpc.NodeUpdateType_UNREGISTER,
+	}
+}
+
+func metadataToMetadataUpdate(nodeID string, metadata map[string]string) *rpc.NodeUpdate {
+	update := make(map[string]*rpc.VersionedValue)
+	for k, v := range metadata {
+		update[k] = &rpc.VersionedValue{
+			Value: v,
+		}
+	}
+
+	return &rpc.NodeUpdate{
+		NodeId:     nodeID,
+		UpdateType: rpc.NodeUpdateType_METADATA,
+		Metadata:   update,
+	}
 }

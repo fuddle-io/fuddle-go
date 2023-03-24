@@ -17,47 +17,55 @@ package fuddle
 
 import (
 	"time"
+
+	"go.uber.org/zap"
 )
 
-type registryOptions struct {
+type options struct {
+	logger         *zap.Logger
 	connectTimeout time.Duration
+	filter         *Filter
 }
 
-type RegistryOption interface {
-	apply(*registryOptions)
+type Option interface {
+	apply(*options)
+}
+
+type loggerOption struct {
+	logger *zap.Logger
+}
+
+func (o loggerOption) apply(opts *options) {
+	opts.logger = o.logger
+}
+
+func WithLogger(logger *zap.Logger) Option {
+	return loggerOption{logger: logger}
 }
 
 type connectTimeoutOption struct {
 	timeout time.Duration
 }
 
-func (o connectTimeoutOption) apply(opts *registryOptions) {
+func (o connectTimeoutOption) apply(opts *options) {
 	opts.connectTimeout = o.timeout
 }
 
 // WithConnectTimeout defines the time to wait for each connection attempt
 // before timing out. Default to 1 second.
-func WithConnectTimeout(timeout time.Duration) RegistryOption {
+func WithConnectTimeout(timeout time.Duration) Option {
 	return connectTimeoutOption{timeout: timeout}
-}
-
-type nodesOptions struct {
-	filter *Filter
-}
-
-type NodesOption interface {
-	apply(*nodesOptions)
 }
 
 type filterOption struct {
 	filter *Filter
 }
 
-func (o filterOption) apply(opts *nodesOptions) {
+func (o filterOption) apply(opts *options) {
 	opts.filter = o.filter
 }
 
 // WithFilter filters the returned set of nodes.
-func WithFilter(f Filter) NodesOption {
+func WithFilter(f Filter) Option {
 	return filterOption{filter: &f}
 }
