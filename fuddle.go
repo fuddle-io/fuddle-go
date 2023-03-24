@@ -22,6 +22,7 @@ import (
 
 	rpc "github.com/fuddle-io/fuddle-rpc/go"
 	multierror "github.com/hashicorp/go-multierror"
+	"go.uber.org/atomic"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -34,6 +35,8 @@ type Fuddle struct {
 	client rpc.RegistryClient
 
 	registry *registry
+
+	closed *atomic.Bool
 
 	logger *zap.Logger
 }
@@ -53,6 +56,7 @@ func Connect(addrs []string, opts ...Option) (*Fuddle, error) {
 
 	fuddle := &Fuddle{
 		registry: newRegistry(),
+		closed:   atomic.NewBool(false),
 		logger:   options.logger,
 	}
 
@@ -153,6 +157,7 @@ func (f *Fuddle) Register(ctx context.Context, node Node) (*LocalNode, error) {
 // the registry will view all nodes registered by this client as failed instead
 // of left.
 func (f *Fuddle) Close() {
+	f.closed.Store(true)
 	f.conn.Close()
 }
 
@@ -160,7 +165,10 @@ func (f *Fuddle) streamUpdates(stream rpc.Registry_UpdatesClient) {
 	for {
 		update, err := stream.Recv()
 		if err != nil {
-			f.logger.Error("stream error", zap.Error(err))
+			// Check if closed to avoid logging an error when the client closes.
+			if !f.closed.Load() {
+				f.logger.Error("stream error", zap.Error(err))
+			}
 			return
 		}
 
