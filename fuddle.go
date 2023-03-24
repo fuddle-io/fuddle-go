@@ -38,6 +38,7 @@ type Fuddle struct {
 	registry *registry
 
 	closed *atomic.Bool
+	done   chan interface{}
 	wg     sync.WaitGroup
 
 	logger *zap.Logger
@@ -49,8 +50,9 @@ type Fuddle struct {
 // The given addresses are a set of seed addresses for Fuddle nodes.
 func Connect(addrs []string, opts ...Option) (*Fuddle, error) {
 	options := &options{
-		logger:         zap.NewNop(),
-		connectTimeout: time.Millisecond * 1000,
+		logger:            zap.NewNop(),
+		connectTimeout:    time.Millisecond * 1000,
+		heartbeatInterval: time.Second * 10,
 	}
 	for _, o := range opts {
 		o.apply(options)
@@ -59,6 +61,7 @@ func Connect(addrs []string, opts ...Option) (*Fuddle, error) {
 	fuddle := &Fuddle{
 		registry: newRegistry(),
 		closed:   atomic.NewBool(false),
+		done:     make(chan interface{}),
 		logger:   options.logger,
 	}
 
@@ -81,6 +84,12 @@ func Connect(addrs []string, opts ...Option) (*Fuddle, error) {
 	go func() {
 		defer fuddle.wg.Done()
 		fuddle.streamUpdates(updateStream)
+	}()
+
+	fuddle.wg.Add(1)
+	go func() {
+		defer fuddle.wg.Done()
+		fuddle.heartbeats(options.heartbeatInterval)
 	}()
 
 	return fuddle, nil
@@ -163,6 +172,7 @@ func (f *Fuddle) Register(ctx context.Context, node Node) (*LocalNode, error) {
 // the registry will view all nodes registered by this client as failed instead
 // of left.
 func (f *Fuddle) Close() {
+	close(f.done)
 	f.closed.Store(true)
 	f.conn.Close()
 	f.wg.Wait()
@@ -186,6 +196,19 @@ func (f *Fuddle) streamUpdates(stream rpc.Registry_UpdatesClient) {
 		)
 
 		f.registry.ApplyUpdate(update)
+	}
+}
+
+func (f *Fuddle) heartbeats(interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			f.logger.Debug("send heartbeat")
+		case <-f.done:
+			return
+		}
 	}
 }
 
