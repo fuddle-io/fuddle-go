@@ -22,9 +22,10 @@ import (
 )
 
 type options struct {
-	logger         *zap.Logger
-	connectTimeout time.Duration
-	filter         *Filter
+	logger            *zap.Logger
+	connectTimeout    time.Duration
+	heartbeatInterval time.Duration
+	filter            *Filter
 }
 
 type Option interface {
@@ -55,6 +56,18 @@ func (o connectTimeoutOption) apply(opts *options) {
 // before timing out. Default to 1 second.
 func WithConnectTimeout(timeout time.Duration) Option {
 	return connectTimeoutOption{timeout: timeout}
+}
+
+type heartbeatIntervalOption struct {
+	interval time.Duration
+}
+
+func (o heartbeatIntervalOption) apply(opts *options) {
+	opts.heartbeatInterval = o.interval
+}
+
+func WithHeartbeatInterval(interval time.Duration) Option {
+	return heartbeatIntervalOption{interval: interval}
 }
 
 type filterOption struct {

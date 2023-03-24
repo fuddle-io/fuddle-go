@@ -18,10 +18,12 @@ package fuddle
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	rpc "github.com/fuddle-io/fuddle-rpc/go"
 	multierror "github.com/hashicorp/go-multierror"
+	"go.uber.org/atomic"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -35,6 +37,10 @@ type Fuddle struct {
 
 	registry *registry
 
+	closed *atomic.Bool
+	done   chan interface{}
+	wg     sync.WaitGroup
+
 	logger *zap.Logger
 }
 
@@ -44,8 +50,9 @@ type Fuddle struct {
 // The given addresses are a set of seed addresses for Fuddle nodes.
 func Connect(addrs []string, opts ...Option) (*Fuddle, error) {
 	options := &options{
-		logger:         zap.NewNop(),
-		connectTimeout: time.Millisecond * 1000,
+		logger:            zap.NewNop(),
+		connectTimeout:    time.Millisecond * 1000,
+		heartbeatInterval: time.Second * 10,
 	}
 	for _, o := range opts {
 		o.apply(options)
@@ -53,6 +60,8 @@ func Connect(addrs []string, opts ...Option) (*Fuddle, error) {
 
 	fuddle := &Fuddle{
 		registry: newRegistry(),
+		closed:   atomic.NewBool(false),
+		done:     make(chan interface{}),
 		logger:   options.logger,
 	}
 
@@ -71,7 +80,17 @@ func Connect(addrs []string, opts ...Option) (*Fuddle, error) {
 		return nil, fmt.Errorf("fuddle: update stream: %w", err)
 	}
 
-	go fuddle.streamUpdates(updateStream)
+	fuddle.wg.Add(1)
+	go func() {
+		defer fuddle.wg.Done()
+		fuddle.streamUpdates(updateStream)
+	}()
+
+	fuddle.wg.Add(1)
+	go func() {
+		defer fuddle.wg.Done()
+		fuddle.heartbeats(options.heartbeatInterval)
+	}()
 
 	return fuddle, nil
 }
@@ -101,25 +120,9 @@ func (f *Fuddle) Register(ctx context.Context, node Node) (*LocalNode, error) {
 		node.Metadata = make(map[string]string)
 	}
 
-	// Versions only set by the registry so leave as 0.
-	versionedMetadata := make(map[string]*rpc.VersionedValue)
-	for k, v := range node.Metadata {
-		versionedMetadata[k] = &rpc.VersionedValue{
-			Value: v,
-		}
-	}
-
+	rpcNode := node.ToRPCNode()
 	req := &rpc.RegisterRequest{
-		Node: &rpc.Node{
-			Id: node.ID,
-			Attributes: &rpc.NodeAttributes{
-				Service:  node.Service,
-				Locality: node.Locality,
-				Created:  node.Created,
-				Revision: node.Revision,
-			},
-			Metadata: versionedMetadata,
-		},
+		Node: rpcNode,
 	}
 	resp, err := f.client.Register(ctx, req)
 	if err != nil {
@@ -141,9 +144,11 @@ func (f *Fuddle) Register(ctx context.Context, node Node) (*LocalNode, error) {
 		return nil, fmt.Errorf("fuddle: register: %s", resp.Error.Description)
 	}
 
+	f.registry.RegisterLocal(rpcNode)
+
 	f.logger.Debug("node registered", zap.String("id", node.ID))
 
-	return newLocalNode(node.ID, f.client, f.logger), nil
+	return newLocalNode(node.ID, f.client, f.registry, f.logger), nil
 }
 
 // Close closes the connection to the server and unregisters any registered
@@ -153,14 +158,20 @@ func (f *Fuddle) Register(ctx context.Context, node Node) (*LocalNode, error) {
 // the registry will view all nodes registered by this client as failed instead
 // of left.
 func (f *Fuddle) Close() {
+	close(f.done)
+	f.closed.Store(true)
 	f.conn.Close()
+	f.wg.Wait()
 }
 
 func (f *Fuddle) streamUpdates(stream rpc.Registry_UpdatesClient) {
 	for {
 		update, err := stream.Recv()
 		if err != nil {
-			f.logger.Error("stream error", zap.Error(err))
+			// Check if closed to avoid logging an error when the client closes.
+			if !f.closed.Load() {
+				f.logger.Error("stream error", zap.Error(err))
+			}
 			return
 		}
 
@@ -170,7 +181,33 @@ func (f *Fuddle) streamUpdates(stream rpc.Registry_UpdatesClient) {
 			zap.String("update-type", update.UpdateType.String()),
 		)
 
-		f.registry.ApplyUpdate(update)
+		f.registry.ApplyRemoteUpdate(update)
+	}
+}
+
+func (f *Fuddle) heartbeats(interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			f.logger.Debug(
+				"send heartbeat",
+				zap.Strings("nodes", f.registry.LocalNodeIDs()),
+			)
+
+			_, err := f.client.Heartbeat(context.TODO(), &rpc.HeartbeatRequest{
+				Heartbeat: &rpc.Heartbeat{
+					Timestamp: time.Now().UnixMilli(),
+				},
+				Nodes: f.registry.LocalNodeIDs(),
+			})
+			if err != nil {
+				f.logger.Error("heartbeat failed", zap.Error(err))
+			}
+		case <-f.done:
+			return
+		}
 	}
 }
 

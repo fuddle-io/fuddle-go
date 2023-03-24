@@ -80,6 +80,27 @@ func (s *Node) Copy() Node {
 	return cp
 }
 
+func (s *Node) ToRPCNode() *rpc.Node {
+	// Versions only set by the registry so leave as 0.
+	versionedMetadata := make(map[string]*rpc.VersionedValue)
+	for k, v := range s.Metadata {
+		versionedMetadata[k] = &rpc.VersionedValue{
+			Value: v,
+		}
+	}
+
+	return &rpc.Node{
+		Id: s.ID,
+		Attributes: &rpc.NodeAttributes{
+			Service:  s.Service,
+			Locality: s.Locality,
+			Created:  s.Created,
+			Revision: s.Revision,
+		},
+		Metadata: versionedMetadata,
+	}
+}
+
 func NodeFromRPC(rpcNode *rpc.Node) Node {
 	metadata := make(map[string]string)
 	for k, vv := range rpcNode.Metadata {
