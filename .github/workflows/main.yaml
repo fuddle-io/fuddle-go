@@ -55,7 +55,7 @@ jobs:
           go-version: '1.20'
 
       - name: Install Fuddle
-        run: go install github.com/fuddle-io/fuddle@0e819d542600c88c59f3f53e4beec166722ee9c3
+        run: go install github.com/fuddle-io/fuddle@391ce3b13197254322468ae52f5ac88d5ff14e0e
 
       - name: Start Fuddle
         run: fuddle start --registry-addr 127.0.0.1:8220 &

@@ -121,7 +121,7 @@ func (f *Fuddle) Register(ctx context.Context, node Node) (*LocalNode, error) {
 			Metadata: versionedMetadata,
 		},
 	}
-	resp, err := f.client.RegisterV2(ctx, req)
+	resp, err := f.client.Register(ctx, req)
 	if err != nil {
 		f.logger.Error(
 			"failed to register node",
