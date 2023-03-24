@@ -18,6 +18,7 @@ package fuddle
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	rpc "github.com/fuddle-io/fuddle-rpc/go"
@@ -37,6 +38,7 @@ type Fuddle struct {
 	registry *registry
 
 	closed *atomic.Bool
+	wg     sync.WaitGroup
 
 	logger *zap.Logger
 }
@@ -75,7 +77,11 @@ func Connect(addrs []string, opts ...Option) (*Fuddle, error) {
 		return nil, fmt.Errorf("fuddle: update stream: %w", err)
 	}
 
-	go fuddle.streamUpdates(updateStream)
+	fuddle.wg.Add(1)
+	go func() {
+		defer fuddle.wg.Done()
+		fuddle.streamUpdates(updateStream)
+	}()
 
 	return fuddle, nil
 }
@@ -159,6 +165,7 @@ func (f *Fuddle) Register(ctx context.Context, node Node) (*LocalNode, error) {
 func (f *Fuddle) Close() {
 	f.closed.Store(true)
 	f.conn.Close()
+	f.wg.Wait()
 }
 
 func (f *Fuddle) streamUpdates(stream rpc.Registry_UpdatesClient) {
