@@ -23,6 +23,7 @@ import (
 	rpc "github.com/fuddle-io/fuddle-rpc/go"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/atomic"
 )
 
 func TestRegistry_RegisterThenQueryNode(t *testing.T) {
@@ -294,6 +295,33 @@ func TestRegistry_RemoteUpdatesToLocalNodesIgnored(t *testing.T) {
 	n, ok = r.Node(registeredNode.ID)
 	assert.True(t, ok)
 	assert.Equal(t, n, registeredNode)
+}
+
+func TestRegistry_Subscribe(t *testing.T) {
+	r := newRegistry()
+
+	called := atomic.NewUint32(0)
+	r.Subscribe(func() {
+		called.Inc()
+	})
+
+	assert.Equal(t, uint32(1), called.Load())
+
+	registeredRemoteNode := randomNode()
+	r.ApplyRemoteUpdate(nodeToRegisterUpdate(registeredRemoteNode))
+	update := randomMetadata()
+	r.ApplyRemoteUpdate(metadataToMetadataUpdate(registeredRemoteNode.ID, update))
+	r.ApplyRemoteUpdate(nodeToUnregisterUpdate(registeredRemoteNode))
+
+	assert.Equal(t, uint32(4), called.Load())
+
+	registeredLocalNode := randomNode()
+	r.RegisterLocal(registeredLocalNode.ToRPCNode())
+	update = randomMetadata()
+	r.UpdateMetadataLocal(registeredLocalNode.ID, update)
+	r.UnregisterLocal(registeredLocalNode.ID)
+
+	assert.Equal(t, uint32(7), called.Load())
 }
 
 func randomNode() Node {

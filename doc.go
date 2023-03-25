@@ -43,9 +43,10 @@
 //
 //	client.Nodes(opts)
 //
-// Subscribe to changes in a set of nodes:
+// Subscribe to changes in the registry. The callback will fire whenever the
+// registry is updated.
 //
-//	client.Subscribe(callback, opts)
+//	client.Subscribe(callback)
 //
 // Note when subscribing the callback will fire immediately with the matching
 // cluster state, so theres no need to call Nodes first.
@@ -82,9 +83,6 @@
 //
 //	// Lookup the set of nodes matching the filter.
 //	client.Nodes(fuddle.WithFilter(filter))
-//
-//	// Subscribe to updates in the set of nodes matching the filter.
-//	client.Subscribe(callback, fuddle.WithFilter(filter))
 //
 // # Register
 //

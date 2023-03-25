@@ -126,13 +126,13 @@ func Example_subscribeToOrdersServiceNodes() {
 	// Filter to only include order service nodes in us-east-1 whose status
 	// is active and protocol version is either 2 or 3.
 	var addrs []string
-	client.Subscribe(func(orderNodes []fuddle.Node) {
+	client.Subscribe(func() {
 		addrs = nil
-		for _, node := range orderNodes {
+		for _, node := range client.Nodes(fuddle.WithFilter(filter)) {
 			addr := node.Metadata["addr.rpc.ip"] + ":" + node.Metadata["addr.rpc.port"]
 			addrs = append(addrs, addr)
 		}
 
 		fmt.Println("order service:", addrs)
-	}, fuddle.WithFilter(filter))
+	})
 }
