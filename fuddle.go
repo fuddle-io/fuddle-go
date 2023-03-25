@@ -103,14 +103,10 @@ func (f *Fuddle) Nodes(opts ...Option) []Node {
 // Subscribe registers the given callback to fire when the registry state
 // changes.
 //
-// The callback will be called immediately after registering with the current
-// node state.
-//
-// Note the callback is called synchronously with the registry mutex held,
-// therefore it must NOT block or callback to the registry (or it will
-// deadlock).
-func (f *Fuddle) Subscribe(cb func(nodes []Node), opts ...Option) func() {
-	return f.registry.Subscribe(cb, opts...)
+// The callback will be called immediately after registering to bootstrap
+// the caller.
+func (f *Fuddle) Subscribe(cb func()) func() {
+	return f.registry.Subscribe(cb)
 }
 
 // Register registers the given node and returns a reference to the node so

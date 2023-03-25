@@ -22,8 +22,7 @@ import (
 )
 
 type subscriber struct {
-	Callback func(nodes []Node)
-	Options  []Option
+	Callback func()
 }
 
 type registry struct {
@@ -73,17 +72,18 @@ func (r *registry) LocalNodeIDs() []string {
 	return ids
 }
 
-func (r *registry) Subscribe(cb func(nodes []Node), opts ...Option) func() {
+func (r *registry) Subscribe(cb func()) func() {
 	r.mu.Lock()
-	defer r.mu.Unlock()
 
 	sub := &subscriber{
 		Callback: cb,
-		Options:  opts,
 	}
 	r.subscribers[sub] = struct{}{}
 
-	cb(r.nodesLocked(opts...))
+	r.mu.Unlock()
+
+	// Ensure calling outside of the mutex.
+	cb()
 
 	return func() {
 		r.mu.Lock()
@@ -95,10 +95,10 @@ func (r *registry) Subscribe(cb func(nodes []Node), opts ...Option) func() {
 
 func (r *registry) ApplyRemoteUpdate(update *rpc.NodeUpdate) {
 	r.mu.Lock()
-	defer r.mu.Unlock()
 
 	// Ignore updates about local nodes.
 	if _, ok := r.localNodes[update.NodeId]; ok {
+		r.mu.Unlock()
 		return
 	}
 
@@ -111,35 +111,39 @@ func (r *registry) ApplyRemoteUpdate(update *rpc.NodeUpdate) {
 		r.applyMetadataUpdateLocked(update)
 	}
 
-	r.notifySubscribersLocked()
+	r.mu.Unlock()
+
+	r.notifySubscribers()
 }
 
 func (r *registry) RegisterLocal(node *rpc.Node) {
 	r.mu.Lock()
-	defer r.mu.Unlock()
 
 	r.nodes[node.Id] = node
 	r.localNodes[node.Id] = struct{}{}
 
-	r.notifySubscribersLocked()
+	r.mu.Unlock()
+
+	r.notifySubscribers()
 }
 
 func (r *registry) UnregisterLocal(nodeID string) {
 	r.mu.Lock()
-	defer r.mu.Unlock()
 
 	delete(r.nodes, nodeID)
 	delete(r.localNodes, nodeID)
 
-	r.notifySubscribersLocked()
+	r.mu.Unlock()
+
+	r.notifySubscribers()
 }
 
 func (r *registry) UpdateMetadataLocal(nodeID string, metadata map[string]string) {
 	r.mu.Lock()
-	defer r.mu.Unlock()
 
 	node, ok := r.nodes[nodeID]
 	if !ok {
+		r.mu.Unlock()
 		return
 	}
 
@@ -149,6 +153,10 @@ func (r *registry) UpdateMetadataLocal(nodeID string, metadata map[string]string
 			Value: v,
 		}
 	}
+
+	r.mu.Unlock()
+
+	r.notifySubscribers()
 }
 
 func (r *registry) applyRegisterUpdateLocked(update *rpc.NodeUpdate) {
@@ -190,8 +198,18 @@ func (r *registry) nodesLocked(opts ...Option) []Node {
 	return nodes
 }
 
-func (r *registry) notifySubscribersLocked() {
+func (r *registry) notifySubscribers() {
+	r.mu.Lock()
+
+	// Copy the subscribers to avoid calling with the mutex locked.
+	subscribers := make([]*subscriber, 0, len(r.subscribers))
 	for sub := range r.subscribers {
-		sub.Callback(r.nodesLocked(sub.Options...))
+		subscribers = append(subscribers, sub)
+	}
+
+	r.mu.Unlock()
+
+	for _, sub := range subscribers {
+		sub.Callback()
 	}
 }

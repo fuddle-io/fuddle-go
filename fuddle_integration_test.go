@@ -92,12 +92,12 @@ func waitForNode(client *Fuddle, id string) (Node, error) {
 	var node Node
 	found := false
 	recvCh := make(chan interface{})
-	unsubscribe := client.Subscribe(func(nodes []Node) {
+	unsubscribe := client.Subscribe(func() {
 		if found {
 			return
 		}
 
-		for _, n := range nodes {
+		for _, n := range client.Nodes() {
 			if n.ID == id {
 				found = true
 				node = n
@@ -117,12 +117,12 @@ func waitForNode(client *Fuddle, id string) (Node, error) {
 func waitForCount(client *Fuddle, count int) error {
 	found := false
 	recvCh := make(chan interface{})
-	unsubscribe := client.Subscribe(func(nodes []Node) {
+	unsubscribe := client.Subscribe(func() {
 		if found {
 			return
 		}
 
-		if len(nodes) == count {
+		if len(client.Nodes()) == count {
 			found = true
 			close(recvCh)
 			return
