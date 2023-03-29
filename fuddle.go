@@ -21,11 +21,13 @@ import (
 	"math/rand"
 	"net"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/fuddle-io/fuddle-gov3/internal/resolvers"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/grpclog"
 )
@@ -35,7 +37,15 @@ import (
 type Fuddle struct {
 	connectAttemptTimeout time.Duration
 
+	onConnectionStateChange func(state ConnState)
+
 	conn *grpc.ClientConn
+
+	// cancel is a function called when the client is shutdown to stop any
+	// waiting contexts.
+	cancelCtx context.Context
+	cancel    func()
+	wg        sync.WaitGroup
 
 	logger              *zap.Logger
 	grpcLoggerVerbosity int
@@ -54,22 +64,39 @@ func Connect(ctx context.Context, seeds []string, opts ...Option) (*Fuddle, erro
 		o.apply(options)
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
 	f := &Fuddle{
-		connectAttemptTimeout: options.connectAttemptTimeout,
-		logger:                options.logger,
-		grpcLoggerVerbosity:   options.grpcLoggerVerbosity,
+		connectAttemptTimeout:   options.connectAttemptTimeout,
+		onConnectionStateChange: options.onConnectionStateChange,
+
+		cancelCtx: ctx,
+		cancel:    cancel,
+
+		logger:              options.logger,
+		grpcLoggerVerbosity: options.grpcLoggerVerbosity,
 	}
 	if err := f.connect(ctx, seeds); err != nil {
 		return nil, fmt.Errorf("fuddle: %w", err)
 	}
 
-	return &Fuddle{}, nil
+	f.wg.Add(1)
+	go func() {
+		defer f.wg.Done()
+		f.monitorConnection()
+	}()
+
+	return f, nil
 }
 
 // Close closes the clients connection to Fuddle and unregisters all members
 // registered by this client.
 func (f *Fuddle) Close() {
+	// Note cancel the conn monitor before closing to avoid getting notified
+	// about a disconnect.
+	f.cancel()
+
 	f.conn.Close()
+	f.wg.Wait()
 }
 
 func (f *Fuddle) connect(ctx context.Context, seeds []string) error {
@@ -113,10 +140,48 @@ func (f *Fuddle) connect(ctx context.Context, seeds []string) error {
 		return fmt.Errorf("connect: %w", err)
 	}
 
-	f.logger.Info("connection ok")
 	f.conn = conn
 
 	return nil
+}
+
+// monitorConnection detects disconnects and reconnects.
+func (f *Fuddle) monitorConnection() {
+	for {
+		s := f.conn.GetState()
+		if s == connectivity.Ready {
+			f.onConnected()
+		} else {
+			f.conn.Connect()
+		}
+
+		if !f.conn.WaitForStateChange(f.cancelCtx, s) {
+			// Only returns if the client is closed.
+			return
+		}
+
+		// If we were ready but now the state has changed we must have
+		// droped the connection.
+		if s == connectivity.Ready {
+			f.onDisconnect()
+		}
+	}
+}
+
+func (f *Fuddle) onConnected() {
+	f.logger.Info("connected")
+
+	if f.onConnectionStateChange != nil {
+		f.onConnectionStateChange(StateConnected)
+	}
+}
+
+func (f *Fuddle) onDisconnect() {
+	f.logger.Info("disconnected")
+
+	if f.onConnectionStateChange != nil {
+		f.onConnectionStateChange(StateDisconnected)
+	}
 }
 
 func (f *Fuddle) dialerWithTimeout(ctx context.Context, addr string) (net.Conn, error) {
