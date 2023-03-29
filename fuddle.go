@@ -64,17 +64,18 @@ func Connect(ctx context.Context, seeds []string, opts ...Option) (*Fuddle, erro
 		o.apply(options)
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	cancelCtx, cancel := context.WithCancel(context.Background())
 	f := &Fuddle{
 		connectAttemptTimeout:   options.connectAttemptTimeout,
 		onConnectionStateChange: options.onConnectionStateChange,
 
-		cancelCtx: ctx,
+		cancelCtx: cancelCtx,
 		cancel:    cancel,
 
 		logger:              options.logger,
 		grpcLoggerVerbosity: options.grpcLoggerVerbosity,
 	}
+
 	if err := f.connect(ctx, seeds); err != nil {
 		return nil, fmt.Errorf("fuddle: %w", err)
 	}
