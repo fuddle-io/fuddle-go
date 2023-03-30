@@ -18,6 +18,10 @@ See the [package documentation](https://pkg.go.dev/github.com/fuddle-io/fuddle-g
 for SDK usage, and [Fuddle](https://github.com/fuddle-io/fuddle) for
 documentation on the Fuddle registry.
 
+## Testing
+Currently the Go SDK is primarily tested using
+[Fuddle](https://github.com/fuddle-io/fuddle) system tests.
+
 # :warning: Limitations
 Fuddle is still in early stages of development so has a number of limitations.
 
