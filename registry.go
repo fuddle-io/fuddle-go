@@ -45,13 +45,21 @@ func newRegistry() *registry {
 	}
 }
 
-func (r *registry) Members(opts ...Option) []Member {
+func (r *registry) Members(opts ...MembersOption) []Member {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	options := &membersOptions{}
+	for _, o := range opts {
+		o.apply(options)
+	}
+
 	var members []Member
 	for _, m := range r.members {
-		members = append(members, fromRPC(m))
+		m := fromRPC(m)
+		if options.filter == nil || options.filter.Match(m) {
+			members = append(members, m)
+		}
 	}
 	return members
 }

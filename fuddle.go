@@ -107,8 +107,8 @@ func Connect(ctx context.Context, seeds []string, opts ...Option) (*Fuddle, erro
 	return f, nil
 }
 
-func (f *Fuddle) Members() []Member {
-	return f.registry.Members()
+func (f *Fuddle) Members(opts ...MembersOption) []Member {
+	return f.registry.Members(opts...)
 }
 
 func (f *Fuddle) LocalMembers() []Member {
