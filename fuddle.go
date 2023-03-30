@@ -182,6 +182,37 @@ func (f *Fuddle) Unregister(ctx context.Context, id string) error {
 	return nil
 }
 
+func (f *Fuddle) UpdateMemberMetadata(ctx context.Context, id string, metadata map[string]string) error {
+	req := &rpc.UpdateMemberMetadataRequest{
+		Id:       id,
+		Metadata: metadata,
+	}
+	resp, err := f.client.UpdateMemberMetadata(ctx, req)
+	if err != nil {
+		f.logger.Error(
+			"failed to update member metadata",
+			zap.String("id", id),
+			zap.Error(err),
+		)
+		return fmt.Errorf("fuddle: update member metadata: %w", err)
+	}
+	if resp.Error != nil {
+		err = rpcErrorToError(resp.Error)
+		f.logger.Error(
+			"failed to update member metadata",
+			zap.String("id", id),
+			zap.Error(err),
+		)
+		return fmt.Errorf("fuddle: update member metadata: %w", err)
+	}
+
+	f.registry.UpdateMetadataLocal(id, metadata)
+
+	f.logger.Debug("member metadata updated", zap.String("id", id))
+
+	return nil
+}
+
 // Close closes the clients connection to Fuddle and unregisters all members
 // registered by this client.
 func (f *Fuddle) Close() {
