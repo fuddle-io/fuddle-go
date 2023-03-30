@@ -24,7 +24,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/fuddle-io/fuddle-gov3/internal/resolvers"
+	"github.com/fuddle-io/fuddle-go/internal/resolvers"
 	rpc "github.com/fuddle-io/fuddle-rpc/go"
 	"github.com/google/uuid"
 	"go.uber.org/atomic"
