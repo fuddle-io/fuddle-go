@@ -25,6 +25,9 @@ import (
 	"time"
 
 	"github.com/fuddle-io/fuddle-gov3/internal/resolvers"
+	rpc "github.com/fuddle-io/fuddle-rpc/go"
+	"github.com/google/uuid"
+	"go.uber.org/atomic"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
@@ -39,13 +42,18 @@ type Fuddle struct {
 
 	onConnectionStateChange func(state ConnState)
 
-	conn *grpc.ClientConn
+	clientID string
+	registry *registry
+
+	conn   *grpc.ClientConn
+	client rpc.RegistryV2Client
 
 	// cancel is a function called when the client is shutdown to stop any
 	// waiting contexts.
 	cancelCtx context.Context
 	cancel    func()
 	wg        sync.WaitGroup
+	closed    *atomic.Bool
 
 	logger              *zap.Logger
 	grpcLoggerVerbosity int
@@ -66,11 +74,16 @@ func Connect(ctx context.Context, seeds []string, opts ...Option) (*Fuddle, erro
 
 	cancelCtx, cancel := context.WithCancel(context.Background())
 	f := &Fuddle{
-		connectAttemptTimeout:   options.connectAttemptTimeout,
+		connectAttemptTimeout: options.connectAttemptTimeout,
+
 		onConnectionStateChange: options.onConnectionStateChange,
+
+		clientID: uuid.New().String(),
+		registry: newRegistry(),
 
 		cancelCtx: cancelCtx,
 		cancel:    cancel,
+		closed:    atomic.NewBool(false),
 
 		logger:              options.logger,
 		grpcLoggerVerbosity: options.grpcLoggerVerbosity,
@@ -89,12 +102,54 @@ func Connect(ctx context.Context, seeds []string, opts ...Option) (*Fuddle, erro
 	return f, nil
 }
 
+func (f *Fuddle) Members() []Member {
+	return f.registry.Members()
+}
+
+func (f *Fuddle) Subscribe(cb func()) func() {
+	return f.registry.Subscribe(cb)
+}
+
+func (f *Fuddle) Register(ctx context.Context, member Member) error {
+	if member.Metadata == nil {
+		member.Metadata = make(map[string]string)
+	}
+
+	resp, err := f.client.RegisterMember(ctx, &rpc.RegisterMemberRequest{
+		Member: member.toRPC(f.clientID),
+	})
+	if err != nil {
+		f.logger.Error(
+			"failed to register member",
+			zap.String("id", member.ID),
+			zap.Error(err),
+		)
+		return fmt.Errorf("fuddle: register: %w", err)
+	}
+	if resp.Error != nil {
+		err = rpcErrorToError(resp.Error)
+		f.logger.Error(
+			"failed to register member",
+			zap.String("id", member.ID),
+			zap.Error(err),
+		)
+		return fmt.Errorf("fuddle: register: %w", err)
+	}
+
+	f.registry.RegisterLocal(member.toRPC(f.clientID))
+
+	f.logger.Debug("member registered", zap.String("id", member.ID))
+
+	return nil
+}
+
 // Close closes the clients connection to Fuddle and unregisters all members
 // registered by this client.
 func (f *Fuddle) Close() {
 	// Note cancel the conn monitor before closing to avoid getting notified
 	// about a disconnect.
 	f.cancel()
+	f.closed.Store(true)
 
 	f.conn.Close()
 	f.wg.Wait()
@@ -142,6 +197,7 @@ func (f *Fuddle) connect(ctx context.Context, seeds []string) error {
 	}
 
 	f.conn = conn
+	f.client = rpc.NewRegistryV2Client(conn)
 
 	return nil
 }
@@ -175,6 +231,21 @@ func (f *Fuddle) onConnected() {
 	if f.onConnectionStateChange != nil {
 		f.onConnectionStateChange(StateConnected)
 	}
+
+	f.reenterLocalMembers(context.Background())
+
+	subscribeStream, err := f.client.Subscribe(
+		context.Background(), &rpc.SubscribeRequest{
+			Versions: f.registry.KnownVersions(),
+		},
+	)
+	if err != nil {
+		f.logger.Warn("create stream subscribe error", zap.Error(err))
+	} else {
+		// Start streaming updates. If the connection closes streamUpdates will
+		// exit.
+		go f.streamUpdates(subscribeStream)
+	}
 }
 
 func (f *Fuddle) onDisconnect() {
@@ -190,4 +261,62 @@ func (f *Fuddle) dialerWithTimeout(ctx context.Context, addr string) (net.Conn, 
 		Timeout: f.connectAttemptTimeout,
 	}
 	return dialer.DialContext(ctx, "tcp", addr)
+}
+
+func (f *Fuddle) reenterLocalMembers(ctx context.Context) {
+	f.logger.Debug(
+		"reregistering members",
+		zap.Strings("members", f.registry.LocalMemberIDs()),
+	)
+
+	for _, member := range f.registry.LocalMembers() {
+		resp, err := f.client.RegisterMember(ctx, &rpc.RegisterMemberRequest{
+			Member: member.toRPC(f.clientID),
+		})
+		if err != nil {
+			f.logger.Error(
+				"failed to reregister member",
+				zap.String("id", member.ID),
+				zap.Error(err),
+			)
+			return
+		}
+		if resp.Error != nil {
+			err = rpcErrorToError(resp.Error)
+			f.logger.Error(
+				"failed to reregister member",
+				zap.String("id", member.ID),
+				zap.Error(err),
+			)
+			return
+		}
+
+		f.logger.Debug("member re-registered", zap.String("id", member.ID))
+	}
+}
+
+func (f *Fuddle) streamUpdates(stream rpc.RegistryV2_SubscribeClient) {
+	for {
+		update, err := stream.Recv()
+		if err != nil {
+			// Avoid redundent logs if we've closed.
+			if f.closed.Load() {
+				return
+			}
+			f.logger.Warn("subscribe error", zap.Error(err))
+			return
+		}
+
+		f.logger.Debug(
+			"received update",
+			zap.String("id", update.Id),
+			zap.String("update-type", update.UpdateType.String()),
+		)
+
+		f.registry.ApplyRemoteUpdate(update)
+	}
+}
+
+func rpcErrorToError(e *rpc.ErrorV2) error {
+	return fmt.Errorf("%s: %s", e.Status, e.Description)
 }
