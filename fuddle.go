@@ -188,6 +188,23 @@ func (f *Fuddle) connect(ctx context.Context, seeds []string) error {
 		Timeout:             f.keepAlivePingTimeout,
 		PermitWithoutStream: true,
 	}
+	// Retry registry RPCs if the server is UNAVAILABLE (such as transient
+	// connectivity issues). This will also wait for the client to connect
+	// before sending the RPC.
+	var retryPolicy = `{
+		"methodConfig": [{
+			"name": [{"service": "registryv2.RegistryV2"}],
+			"waitForReady": true,
+
+			"retryPolicy": {
+				"MaxAttempts": 4,
+				"InitialBackoff": ".1s",
+				"MaxBackoff": "5s",
+				"BackoffMultiplier": 2.0,
+				"RetryableStatusCodes": [ "UNAVAILABLE" ]
+			}
+		}]
+	}`
 	conn, err := grpc.DialContext(
 		ctx,
 		// Use the status resolver which uses the configured seed addresses.
@@ -196,6 +213,7 @@ func (f *Fuddle) connect(ctx context.Context, seeds []string) error {
 		grpc.WithResolvers(resolvers.NewStaticResolverBuilder(seeds)),
 		// Add a custom dialer so we can set a per connection attempt timeout.
 		grpc.WithContextDialer(f.dialerWithTimeout),
+		grpc.WithDefaultServiceConfig(retryPolicy),
 		// Block until the connection succeeds.
 		grpc.WithBlock(),
 		grpc.WithKeepaliveParams(keepAliveParams),
