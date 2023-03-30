@@ -49,7 +49,7 @@ type Fuddle struct {
 	registry *registry
 
 	conn   *grpc.ClientConn
-	client rpc.RegistryV2Client
+	client rpc.RegistryClient
 
 	// cancel is a function called when the client is shutdown to stop any
 	// waiting contexts.
@@ -284,7 +284,7 @@ func (f *Fuddle) connect(ctx context.Context, seeds []string) error {
 	// before sending the RPC.
 	var retryPolicy = `{
 		"methodConfig": [{
-			"name": [{"service": "registryv2.RegistryV2"}],
+			"name": [{"service": "registry.Registry"}],
 			"waitForReady": true,
 
 			"retryPolicy": {
@@ -319,7 +319,7 @@ func (f *Fuddle) connect(ctx context.Context, seeds []string) error {
 	}
 
 	f.conn = conn
-	f.client = rpc.NewRegistryV2Client(conn)
+	f.client = rpc.NewRegistryClient(conn)
 
 	return nil
 }
@@ -417,7 +417,7 @@ func (f *Fuddle) reenterLocalMembers(ctx context.Context) {
 	}
 }
 
-func (f *Fuddle) streamUpdates(stream rpc.RegistryV2_SubscribeClient) {
+func (f *Fuddle) streamUpdates(stream rpc.Registry_SubscribeClient) {
 	for {
 		update, err := stream.Recv()
 		if err != nil {
@@ -439,6 +439,6 @@ func (f *Fuddle) streamUpdates(stream rpc.RegistryV2_SubscribeClient) {
 	}
 }
 
-func rpcErrorToError(e *rpc.ErrorV2) error {
+func rpcErrorToError(e *rpc.Error) error {
 	return fmt.Errorf("%s: %s", e.Status, e.Description)
 }
