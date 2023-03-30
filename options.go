@@ -141,3 +141,23 @@ func (o grpcLoggerVerbosityOption) apply(opts *options) {
 func WithGRPCLoggerVerbosity(v int) Option {
 	return grpcLoggerVerbosityOption{v: v}
 }
+
+type membersOptions struct {
+	filter *Filter
+}
+
+type MembersOption interface {
+	apply(*membersOptions)
+}
+
+type filterOption struct {
+	filter *Filter
+}
+
+func (o filterOption) apply(opts *membersOptions) {
+	opts.filter = o.filter
+}
+
+func WithFilter(filter *Filter) MembersOption {
+	return filterOption{filter: filter}
+}
