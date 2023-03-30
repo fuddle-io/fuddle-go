@@ -111,6 +111,10 @@ func (f *Fuddle) Members() []Member {
 	return f.registry.Members()
 }
 
+func (f *Fuddle) LocalMembers() []Member {
+	return f.registry.LocalMembers()
+}
+
 func (f *Fuddle) Subscribe(cb func()) func() {
 	return f.registry.Subscribe(cb)
 }
@@ -148,9 +152,65 @@ func (f *Fuddle) Register(ctx context.Context, member Member) error {
 	return nil
 }
 
+func (f *Fuddle) Unregister(ctx context.Context, id string) error {
+	resp, err := f.client.UnregisterMember(ctx, &rpc.UnregisterMemberRequest{
+		Id: id,
+	})
+	if err != nil {
+		f.logger.Error(
+			"failed to unregister member",
+			zap.String("id", id),
+			zap.Error(err),
+		)
+		return fmt.Errorf("fuddle: unregister: %w", err)
+
+	}
+	if resp.Error != nil {
+		err = rpcErrorToError(resp.Error)
+		f.logger.Error(
+			"failed to unregister member",
+			zap.String("id", id),
+			zap.Error(err),
+		)
+		return fmt.Errorf("fuddle: register: %w", err)
+	}
+
+	f.registry.UnregisterLocal(id)
+
+	f.logger.Debug("member unregistered", zap.String("id", id))
+
+	return nil
+}
+
 // Close closes the clients connection to Fuddle and unregisters all members
 // registered by this client.
 func (f *Fuddle) Close() {
+	// Use a short timeout when unregistering members on close.
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+
+	// Unregister all members.
+	for _, id := range f.registry.LocalMemberIDs() {
+		resp, err := f.client.UnregisterMember(ctx, &rpc.UnregisterMemberRequest{
+			Id: id,
+		})
+		if err != nil {
+			f.logger.Error(
+				"failed to unregister member",
+				zap.String("id", id),
+				zap.Error(err),
+			)
+		}
+		if resp.Error != nil {
+			err = rpcErrorToError(resp.Error)
+			f.logger.Error(
+				"failed to unregister member",
+				zap.String("id", id),
+				zap.Error(err),
+			)
+		}
+	}
+
 	// Note cancel the conn monitor before closing to avoid getting notified
 	// about a disconnect.
 	f.cancel()
