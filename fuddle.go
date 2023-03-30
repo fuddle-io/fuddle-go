@@ -33,12 +33,15 @@ import (
 	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/grpclog"
+	"google.golang.org/grpc/keepalive"
 )
 
 // Fuddle is a client for the Fuddle registry which can be used to subscribe to
 // registry updates and register members.
 type Fuddle struct {
 	connectAttemptTimeout time.Duration
+	keepAlivePingInterval time.Duration
+	keepAlivePingTimeout  time.Duration
 
 	onConnectionStateChange func(state ConnState)
 
@@ -75,6 +78,8 @@ func Connect(ctx context.Context, seeds []string, opts ...Option) (*Fuddle, erro
 	cancelCtx, cancel := context.WithCancel(context.Background())
 	f := &Fuddle{
 		connectAttemptTimeout: options.connectAttemptTimeout,
+		keepAlivePingInterval: options.keepAlivePingInterval,
+		keepAlivePingTimeout:  options.keepAlivePingTimeout,
 
 		onConnectionStateChange: options.onConnectionStateChange,
 
@@ -176,6 +181,13 @@ func (f *Fuddle) connect(ctx context.Context, seeds []string) error {
 
 	f.logger.Info("connecting", zap.Strings("seeds", seeds))
 
+	// Send keep alive pings to detect unresponsive connections and trigger
+	// a reconnect.
+	keepAliveParams := keepalive.ClientParameters{
+		Time:                f.keepAlivePingInterval,
+		Timeout:             f.keepAlivePingTimeout,
+		PermitWithoutStream: true,
+	}
 	conn, err := grpc.DialContext(
 		ctx,
 		// Use the status resolver which uses the configured seed addresses.
@@ -186,6 +198,7 @@ func (f *Fuddle) connect(ctx context.Context, seeds []string) error {
 		grpc.WithContextDialer(f.dialerWithTimeout),
 		// Block until the connection succeeds.
 		grpc.WithBlock(),
+		grpc.WithKeepaliveParams(keepAliveParams),
 	)
 	if err != nil {
 		f.logger.Error(
