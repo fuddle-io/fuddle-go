@@ -3,8 +3,7 @@
 ![CI Workflow](https://github.com/fuddle-io/fuddle-go/actions/workflows/main.yaml/badge.svg)
 
 A Go SDK for the [Fuddle](https://github.com/fuddle-io/fuddle) service registry,
-which applications use to subscribe to registry updates and register local
-members.
+which applications use to register members and discover members in the cluster.
 
 # Usage
 
