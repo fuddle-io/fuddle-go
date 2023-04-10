@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	rpc "github.com/fuddle-io/fuddle-rpc/go"
 	"github.com/fuddle-io/fuddle-go/internal/resolvers"
+	rpc "github.com/fuddle-io/fuddle-rpc/go"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
@@ -42,7 +42,7 @@ type Fuddle struct {
 	grpcLoggerVerbosity int
 }
 
-func Register(ctx context.Context, addrs []string, member Member, opts ...Option) (*Fuddle, error) {
+func Connect(ctx context.Context, addrs []string, member Member, opts ...Option) (*Fuddle, error) {
 	options := defaultOptions()
 	for _, o := range opts {
 		o.apply(options)
