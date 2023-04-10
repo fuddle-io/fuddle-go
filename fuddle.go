@@ -20,6 +20,9 @@ import (
 	"google.golang.org/grpc/keepalive"
 )
 
+// Fuddle is a client for Fuddle registry. It streams updates to build a local
+// eventually consistent view of the cluster, and registers its own local
+// member.
 type Fuddle struct {
 	connectAttemptTimeout time.Duration
 	keepAlivePingInterval time.Duration
@@ -42,7 +45,10 @@ type Fuddle struct {
 	grpcLoggerVerbosity int
 }
 
-func Connect(ctx context.Context, addrs []string, member Member, opts ...Option) (*Fuddle, error) {
+// Connect connects to the registry and registers the given member.
+//
+// addrs is a list of seed addresses of known Fuddle nodes.
+func Connect(ctx context.Context, member Member, addrs []string, opts ...Option) (*Fuddle, error) {
 	options := defaultOptions()
 	for _, o := range opts {
 		o.apply(options)
@@ -73,10 +79,14 @@ func Connect(ctx context.Context, addrs []string, member Member, opts ...Option)
 	return f, nil
 }
 
+// Members returns all known members in the registry.
 func (f *Fuddle) Members() []Member {
 	return f.registry.Members()
 }
 
+// Subscribe subscribes to updates when the registry changes. This also fires
+// the callback immediately after subscribing to bootstrap (which avoids having
+// to first call Fuddoe.Members).
 func (f *Fuddle) Subscribe(cb func()) func() {
 	return f.registry.Subscribe(cb)
 }

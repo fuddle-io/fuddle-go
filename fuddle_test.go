@@ -20,8 +20,6 @@ func (lb *myLoadBalancer) UpdateAddrs(addrs []string) {
 func Example_registerOrdersServiceNode() {
 	client, err := fuddle.Connect(
 		context.TODO(),
-		// Seed addresses of Fuddle servers.
-		[]string{"192.168.1.1:8220", "192.168.1.2:8220", "192.168.1.3:8220"},
 		fuddle.Member{
 			ID:       "orders-32eaba4e",
 			Service:  "orders",
@@ -38,6 +36,8 @@ func Example_registerOrdersServiceNode() {
 				"instance":         "i-0bc636e38d6c537a7",
 			},
 		},
+		// Seed addresses of Fuddle servers.
+		[]string{"192.168.1.1:8220", "192.168.1.2:8220", "192.168.1.3:8220"},
 	)
 	if err != nil {
 		// handle err ...
@@ -52,13 +52,13 @@ func Example_registerOrdersServiceNode() {
 func Example_lookupOrderServiceNodes() {
 	client, err := fuddle.Connect(
 		context.TODO(),
-		// Seed addresses of Fuddle servers.
-		[]string{"192.168.1.1:8220", "192.168.1.2:8220", "192.168.1.3:8220"},
 		fuddle.Member{
 			ID:      "frontend-040090b7",
 			Service: "frontend",
 			// ...
 		},
+		// Seed addresses of Fuddle servers.
+		[]string{"192.168.1.1:8220", "192.168.1.2:8220", "192.168.1.3:8220"},
 	)
 	if err != nil {
 		// handle err ...
