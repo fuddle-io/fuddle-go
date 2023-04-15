@@ -33,8 +33,9 @@ type Fuddle struct {
 
 	registry *registry
 
-	conn   *grpc.ClientConn
-	client rpc.RegistryClient
+	conn        *grpc.ClientConn
+	readClient  rpc.ClientReadRegistryClient
+	writeClient rpc.ClientWriteRegistryClient
 
 	ctx    context.Context
 	cancel func()
@@ -148,7 +149,8 @@ func (f *Fuddle) connect(ctx context.Context, addrs []string) error {
 	}
 
 	f.conn = conn
-	f.client = rpc.NewRegistryClient(conn)
+	f.readClient = rpc.NewClientReadRegistryClient(conn)
+	f.writeClient = rpc.NewClientWriteRegistryClient(conn)
 
 	f.wg.Add(1)
 	go func() {
@@ -202,7 +204,7 @@ func (f *Fuddle) onDisconnect() {
 }
 
 func (f *Fuddle) setupStreamUpdates() {
-	subscription, err := f.client.Subscribe(
+	subscription, err := f.readClient.Updates(
 		f.ctx,
 		&rpc.SubscribeRequest{
 			KnownMembers: f.registry.KnownVersions(),
@@ -225,7 +227,7 @@ func (f *Fuddle) setupStreamUpdates() {
 }
 
 func (f *Fuddle) setupStreamRegister() {
-	stream, err := f.client.Register(
+	stream, err := f.writeClient.Register(
 		// Use background since f.ctx will be cancelled before we've sent
 		// unregister.
 		context.Background(),
@@ -268,7 +270,7 @@ func (f *Fuddle) streamUpdates(stream rpc.Registry_SubscribeClient) {
 	}
 }
 
-func (f *Fuddle) streamHeartbeats(stream rpc.Registry_RegisterClient) {
+func (f *Fuddle) streamHeartbeats(stream rpc.ClientWriteRegistry_RegisterClient) {
 	ticker := time.NewTicker(f.heartbeatInterval)
 	defer ticker.Stop()
 
@@ -290,7 +292,6 @@ func (f *Fuddle) streamHeartbeats(stream rpc.Registry_RegisterClient) {
 			}
 		}
 	}
-
 }
 
 func (f *Fuddle) dialerWithTimeout(ctx context.Context, addr string) (net.Conn, error) {
