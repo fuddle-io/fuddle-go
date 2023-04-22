@@ -3,7 +3,6 @@ package fuddle_test
 import (
 	"context"
 	"log"
-	"strings"
 	"time"
 
 	fuddle "github.com/fuddle-io/fuddle-go"
@@ -21,10 +20,14 @@ func Example_registerOrdersServiceNode() {
 	client, err := fuddle.Connect(
 		context.TODO(),
 		fuddle.Member{
-			ID:       "orders-32eaba4e",
-			Service:  "orders",
-			Locality: "aws.us-east-1-b",
-			Created:  time.Now().UnixMilli(),
+			ID:      "orders-32eaba4e",
+			Status:  "active",
+			Service: "orders",
+			Locality: fuddle.Locality{
+				Region:           "aws-us-east-1",
+				AvailabilityZone: "aws-us-east-1-b",
+			},
+			Started:  time.Now().UnixMilli(),
 			Revision: "v5.1.0-812ebbc",
 			Metadata: map[string]string{
 				"status":           "booting",
@@ -80,7 +83,7 @@ func Example_lookupOrderServiceNodes() {
 			if m.Service != "orders" {
 				continue
 			}
-			if !strings.HasPrefix(m.Locality, "aws.us-east-1") {
+			if m.Locality.Region != "aws.us-east-1" {
 				continue
 			}
 			status, ok := m.Metadata["status"]

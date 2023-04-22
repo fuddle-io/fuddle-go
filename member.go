@@ -4,33 +4,49 @@ import (
 	rpc "github.com/fuddle-io/fuddle-rpc/go"
 )
 
+type Locality struct {
+	Region           string
+	AvailabilityZone string
+}
+
 type Member struct {
 	ID       string
+	Status   string
 	Service  string
-	Locality string
-	Created  int64
+	Locality Locality
+	Started  int64
 	Revision string
 	Metadata map[string]string
 }
 
-func (m *Member) toRPC() *rpc.Member {
-	return &rpc.Member{
-		Id:       m.ID,
-		Service:  m.Service,
-		Locality: m.Locality,
-		Created:  m.Created,
+func (m *Member) toRPC() *rpc.MemberState {
+	return &rpc.MemberState{
+		Id:      m.ID,
+		Status:  m.Status,
+		Service: m.Service,
+		Locality: &rpc.Locality{
+			Region:           m.Locality.Region,
+			AvailabilityZone: m.Locality.AvailabilityZone,
+		},
+		Started:  m.Started,
 		Revision: m.Revision,
 		Metadata: m.Metadata,
 	}
 }
 
-func fromRPC(m *rpc.Member) Member {
-	return Member{
+func fromRPC(m *rpc.MemberState) Member {
+	member := Member{
 		ID:       m.Id,
 		Service:  m.Service,
-		Locality: m.Locality,
-		Created:  m.Created,
+		Started:  m.Started,
 		Revision: m.Revision,
 		Metadata: m.Metadata,
 	}
+	if m.Locality != nil {
+		member.Locality = Locality{
+			Region:           m.Locality.Region,
+			AvailabilityZone: m.Locality.AvailabilityZone,
+		}
+	}
+	return member
 }

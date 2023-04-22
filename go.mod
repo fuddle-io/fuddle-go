@@ -3,7 +3,7 @@ module github.com/fuddle-io/fuddle-go
 go 1.20
 
 require (
-	github.com/fuddle-io/fuddle-rpc/go v0.0.0-20230422091238-397e9d77e965
+	github.com/fuddle-io/fuddle-rpc/go v0.0.0-20230422141008-2439f7c4cb28
 	github.com/google/uuid v1.3.0
 	github.com/stretchr/testify v1.8.0
 	go.uber.org/atomic v1.10.0

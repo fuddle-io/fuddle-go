@@ -5,21 +5,15 @@ import (
 
 	rpc "github.com/fuddle-io/fuddle-rpc/go"
 	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 )
 
 type subscriber struct {
 	Callback func()
 }
 
-type versionedMember struct {
-	Member  *rpc.Member
-	Version *rpc.Version
-}
-
 type registry struct {
 	// members contains the members in the registry known by the client.
-	members map[string]*versionedMember
+	members map[string]*rpc.Member2
 	localID string
 
 	subscribers map[*subscriber]interface{}
@@ -31,9 +25,10 @@ type registry struct {
 }
 
 func newRegistry(member Member, logger *zap.Logger) *registry {
-	members := make(map[string]*versionedMember)
-	members[member.ID] = &versionedMember{
-		Member: member.toRPC(),
+	members := make(map[string]*rpc.Member2)
+	members[member.ID] = &rpc.Member2{
+		State:    member.toRPC(),
+		Liveness: rpc.Liveness_UP,
 	}
 
 	return &registry{
@@ -44,11 +39,11 @@ func newRegistry(member Member, logger *zap.Logger) *registry {
 	}
 }
 
-func (r *registry) LocalRPCMember() *rpc.Member {
+func (r *registry) LocalRPCMember() *rpc.MemberState {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	return r.members[r.localID].Member
+	return r.members[r.localID].State
 }
 
 func (r *registry) Members() []Member {
@@ -57,16 +52,16 @@ func (r *registry) Members() []Member {
 
 	var members []Member
 	for _, m := range r.members {
-		members = append(members, fromRPC(m.Member))
+		members = append(members, fromRPC(m.State))
 	}
 	return members
 }
 
-func (r *registry) KnownVersions() map[string]*rpc.Version {
+func (r *registry) KnownVersions() map[string]*rpc.Version2 {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	versions := make(map[string]*rpc.Version)
+	versions := make(map[string]*rpc.Version2)
 	for id, m := range r.members {
 		// Exclude the local member.
 		if id == r.localID {
@@ -98,33 +93,30 @@ func (r *registry) Subscribe(cb func()) func() {
 	}
 }
 
-func (r *registry) RemoteUpdate(update *rpc.RemoteMemberUpdate) {
+func (r *registry) RemoteUpdate(m *rpc.Member2) {
 	r.logger.Debug(
 		"remote update",
-		zap.Object("update", newRemoteMemberUpdateLogger(update)),
+		zap.Object("member", newMemberLogger(m)),
 	)
 
-	if update.Member.Id == r.localID {
+	if m.State.Id == r.localID {
 		return
 	}
 
-	if update.Member.Status == rpc.Liveness_UP {
-		r.updateMember(&versionedMember{
-			Member:  update.Member,
-			Version: update.Version,
-		})
+	if m.Liveness == rpc.Liveness_UP {
+		r.updateMember(m)
 	} else {
-		r.removeMember(update.Member.Id)
+		r.removeMember(m.State.Id)
 	}
 
 	r.notifySubscribers()
 }
 
-func (r *registry) updateMember(m *versionedMember) {
+func (r *registry) updateMember(m *rpc.Member2) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	r.members[m.Member.Id] = m
+	r.members[m.State.Id] = m
 }
 
 func (r *registry) removeMember(id string) {
@@ -148,94 +140,4 @@ func (r *registry) notifySubscribers() {
 	for _, sub := range subscribers {
 		sub.Callback()
 	}
-}
-
-type versionLogger struct {
-	Owner     string
-	Timestamp int64
-	Counter   uint64
-}
-
-func newVersionLogger(v *rpc.Version) *versionLogger {
-	return &versionLogger{
-		Owner:     v.Owner,
-		Timestamp: v.Timestamp,
-		Counter:   v.Counter,
-	}
-}
-
-func (l versionLogger) MarshalLogObject(e zapcore.ObjectEncoder) error {
-	e.AddString("owner", l.Owner)
-	e.AddInt64("timestamp", l.Timestamp)
-	e.AddUint64("counter", l.Counter)
-	return nil
-}
-
-type metadataLogger map[string]string
-
-func (m metadataLogger) MarshalLogObject(e zapcore.ObjectEncoder) error {
-	for k, v := range m {
-		e.AddString(k, v)
-	}
-	return nil
-}
-
-type memberLogger struct {
-	ID       string
-	Status   string
-	Service  string
-	Locality string
-	Created  int64
-	Revision string
-	Metadata metadataLogger
-}
-
-func newMemberLogger(m *rpc.Member) *memberLogger {
-	return &memberLogger{
-		ID:       m.Id,
-		Status:   m.Status.String(),
-		Service:  m.Service,
-		Locality: m.Locality,
-		Created:  m.Created,
-		Revision: m.Revision,
-		Metadata: m.Metadata,
-	}
-}
-
-func (l memberLogger) MarshalLogObject(e zapcore.ObjectEncoder) error {
-	e.AddString("id", l.ID)
-	e.AddString("status", l.Status)
-	e.AddString("service", l.Service)
-	e.AddString("locality", l.Locality)
-	e.AddInt64("created", l.Created)
-	e.AddString("revision", l.Revision)
-	if err := e.AddObject("metadata", metadataLogger(l.Metadata)); err != nil {
-		return err
-	}
-	return nil
-}
-
-type remoteMemberUpdateLogger struct {
-	UpdateType rpc.MemberUpdateType
-	Member     *memberLogger
-	Version    *versionLogger
-}
-
-func newRemoteMemberUpdateLogger(u *rpc.RemoteMemberUpdate) *remoteMemberUpdateLogger {
-	return &remoteMemberUpdateLogger{
-		UpdateType: u.UpdateType,
-		Member:     newMemberLogger(u.Member),
-		Version:    newVersionLogger(u.Version),
-	}
-}
-
-func (l remoteMemberUpdateLogger) MarshalLogObject(e zapcore.ObjectEncoder) error {
-	e.AddString("update-type", l.UpdateType.String())
-	if err := e.AddObject("member", l.Member); err != nil {
-		return err
-	}
-	if err := e.AddObject("version", l.Version); err != nil {
-		return err
-	}
-	return nil
 }
