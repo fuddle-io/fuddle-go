@@ -4,6 +4,8 @@ github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/fuddle-io/fuddle-rpc/go v0.0.0-20230415052234-60b65351062e h1:KZqmksCKkgaz+9dt0hJ12iWhBGTOIfELtRJlRO5x7wk=
 github.com/fuddle-io/fuddle-rpc/go v0.0.0-20230415052234-60b65351062e/go.mod h1:plrExYS7pCDF4Np8fz1W+Rcc+KYY6DlqRAMmu9Qr4sA=
+github.com/fuddle-io/fuddle-rpc/go v0.0.0-20230422081012-c9264d5343e3 h1:3D2LUCR22k+1JnnGaDl/cQjt/bbqxsZ3vSGphyiiMTs=
+github.com/fuddle-io/fuddle-rpc/go v0.0.0-20230422081012-c9264d5343e3/go.mod h1:plrExYS7pCDF4Np8fz1W+Rcc+KYY6DlqRAMmu9Qr4sA=
 github.com/golang/protobuf v1.5.0/go.mod h1:FsONVRAS9T7sI+LIUmWTfcYkHO4aIWwzhcaSAoJOfIk=
 github.com/golang/protobuf v1.5.2 h1:ROPKBNFfQgOUMifHyP+KYbvpjbdoFNs+aK7DXlji0Tw=
 github.com/golang/protobuf v1.5.2/go.mod h1:XVQd3VNwM+JqD3oG2Ue2ip4fOMUkwXdXDdiuN0vRsmY=
