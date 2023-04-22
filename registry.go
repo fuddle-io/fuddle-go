@@ -108,7 +108,7 @@ func (r *registry) RemoteUpdate(update *rpc.RemoteMemberUpdate) {
 		return
 	}
 
-	if update.Member.Status == rpc.MemberStatus_UP {
+	if update.Member.Status == rpc.Liveness_UP {
 		r.updateMember(&versionedMember{
 			Member:  update.Member,
 			Version: update.Version,
