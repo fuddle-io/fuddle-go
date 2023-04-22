@@ -254,7 +254,7 @@ func (f *Fuddle) setupStreamRegister() {
 	}()
 }
 
-func (f *Fuddle) streamUpdates(stream rpc.Registry_SubscribeClient) {
+func (f *Fuddle) streamUpdates(stream rpc.ClientReadRegistry_UpdatesClient) {
 	for {
 		update, err := stream.Recv()
 		if err != nil {
