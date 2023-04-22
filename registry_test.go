@@ -56,7 +56,7 @@ func TestRegistry_RemoteUpdateRemoveMember(t *testing.T) {
 	reg.RemoteUpdate(&rpc.RemoteMemberUpdate{
 		Member: &rpc.Member{
 			Id:     "member-1",
-			Status: rpc.MemberStatus_LEFT,
+			Status: rpc.Liveness_LEFT,
 		},
 		Version: &rpc.Version{
 			Owner:     "remote-1",
@@ -117,7 +117,7 @@ func TestRegistry_Subscribe(t *testing.T) {
 	reg.RemoteUpdate(&rpc.RemoteMemberUpdate{
 		Member: &rpc.Member{
 			Id:     "member-1",
-			Status: rpc.MemberStatus_LEFT,
+			Status: rpc.Liveness_LEFT,
 		},
 		Version: &rpc.Version{
 			Owner:     "remote-1",
